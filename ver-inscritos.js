@@ -15,7 +15,7 @@ async function verInscritos() {
             ssl: { rejectUnauthorized: true }
         });
 
-        const [rows] = await pool.query('SELECT id, email, subscribed_at as data_inscricao FROM subscribers');
+        const [rows] = await pool.query('SELECT id, email, timezone, subscribed_at as data_inscricao FROM subscribers');
 
         if (rows.length === 0) {
             console.log('Nenhum inscrito encontrado no banco de dados.');
