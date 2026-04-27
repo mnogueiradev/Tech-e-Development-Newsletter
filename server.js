@@ -37,9 +37,19 @@ async function initDB() {
         await pool.execute(`CREATE TABLE IF NOT EXISTS subscribers (
             id INT AUTO_INCREMENT PRIMARY KEY,
             email VARCHAR(255) UNIQUE NOT NULL,
+            timezone VARCHAR(100) DEFAULT 'America/Sao_Paulo',
             subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`);
+
+        try {
+            await pool.execute(`ALTER TABLE subscribers ADD COLUMN timezone VARCHAR(100) DEFAULT 'America/Sao_Paulo'`);
+            console.log('✅ Coluna timezone adicionada à tabela de inscritos (ou já existia).');
+        } catch(e) {}
+
         console.log('✅ Banco de dados TiDB conectado e pronto na Nuvem.');
+
+        // Carrega os cron jobs dinâmicos para cada fuso horário já cadastrado
+        await loadSchedules();
     } catch (err) {
         console.error('❌ Erro ao conectar no TiDB:', err.message);
     }
@@ -50,15 +60,20 @@ initDB();
 // ROUTES
 // ========================
 app.post('/subscribe', async (req, res) => {
-    const { email } = req.body;
+    const { email, timezone } = req.body;
     if (!email || !email.includes('@')) {
         return res.status(400).json({ error: 'Email inválido.' });
     }
 
+    const userTZ = timezone || 'America/Sao_Paulo';
+
     try {
-        await pool.execute(`INSERT INTO subscribers (email) VALUES (?)`, [email]);
+        await pool.execute(`INSERT INTO subscribers (email, timezone) VALUES (?, ?)`, [email, userTZ]);
         res.status(200).json({ message: 'Inscrito com sucesso! Verifique seu email em alguns instantes.' });
         
+        // Garante que o cron para esse fuso horário está rodando
+        scheduleCronForTimezone(userTZ);
+
         // Dispara o email imediatamente de forma assíncrona
         sendWelcomeNewsletter(email);
     } catch (err) {
@@ -72,7 +87,7 @@ app.post('/subscribe', async (req, res) => {
 
 app.get('/subscribers', async (req, res) => {
     try {
-        const [rows] = await pool.query(`SELECT id, email, subscribed_at FROM subscribers`);
+        const [rows] = await pool.query(`SELECT id, email, timezone, subscribed_at FROM subscribers`);
         res.status(200).json({
             total: rows.length,
             subscribers: rows
@@ -220,8 +235,8 @@ function buildEmailHtml(newsBR, newsUS, newsRU) {
     `;
 }
 
-async function processAndSendNewsletter() {
-    console.log('Iniciando processamento da newsletter diária...');
+async function processAndSendNewsletter(tz = null) {
+    console.log(`Iniciando processamento da newsletter diária${tz ? ` para o fuso ${tz}` : ''}...`);
     
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -236,10 +251,16 @@ async function processAndSendNewsletter() {
 
     // 3. Buscar inscritos
     try {
-        const [rows] = await pool.query(`SELECT email FROM subscribers`);
+        let query = `SELECT email FROM subscribers`;
+        let params = [];
+        if (tz) {
+            query += ` WHERE timezone = ?`;
+            params.push(tz);
+        }
+        const [rows] = await pool.query(query, params);
 
         if (rows.length === 0) {
-            console.log('Nenhum inscrito na base de dados. Nenhuma notícia enviada.');
+            console.log('Nenhum inscrito para este fuso horário. Nenhuma notícia enviada.');
             return;
         }
 
@@ -305,13 +326,34 @@ async function sendWelcomeNewsletter(email) {
 }
 
 // ========================
-// CRON JOB
+// CRON JOB DINÂMICO
 // ========================
-// Executa todos os dias às 08:00 (ajuste conforme necessário)
-cron.schedule('0 8 * * *', () => {
-    console.log('⏰ Executando Cron Job Diário para enviar Newsletter');
-    processAndSendNewsletter();
-});
+const scheduledTimezones = new Set();
+
+function scheduleCronForTimezone(tz) {
+    if (scheduledTimezones.has(tz)) return;
+    
+    console.log(`⏰ Agendando disparo diário (08:00) para o fuso horário: ${tz}`);
+    
+    cron.schedule('0 8 * * *', () => {
+        console.log(`⏰ [CRON] Disparando newsletter das 08:00 para o fuso: ${tz}`);
+        processAndSendNewsletter(tz);
+    }, { timezone: tz });
+    
+    scheduledTimezones.add(tz);
+}
+
+async function loadSchedules() {
+    if (!pool) return;
+    try {
+        const [rows] = await pool.query('SELECT DISTINCT timezone FROM subscribers WHERE timezone IS NOT NULL');
+        rows.forEach(row => {
+            scheduleCronForTimezone(row.timezone);
+        });
+    } catch (err) {
+        console.error('Erro ao carregar fusos horários do banco:', err.message);
+    }
+}
 
 // ========================
 // START SERVER

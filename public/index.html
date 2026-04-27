@@ -210,6 +210,9 @@
             const button = e.target.querySelector('button');
             const statusMessage = document.getElementById('statusMessage');
 
+            // Pega o fuso horário dinâmico do navegador do usuário
+            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
             button.innerText = 'Inscrevendo...';
             button.disabled = true;
 
@@ -217,7 +220,7 @@
                 const response = await fetch('/subscribe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: emailInput.value })
+                    body: JSON.stringify({ email: emailInput.value, timezone: userTimezone })
                 });
 
                 const data = await response.json();
