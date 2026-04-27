@@ -38,12 +38,18 @@ async function initDB() {
             id INT AUTO_INCREMENT PRIMARY KEY,
             email VARCHAR(255) UNIQUE NOT NULL,
             timezone VARCHAR(100) DEFAULT 'America/Sao_Paulo',
+            topic VARCHAR(100) DEFAULT 'tecnologia',
             subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`);
 
         try {
             await pool.execute(`ALTER TABLE subscribers ADD COLUMN timezone VARCHAR(100) DEFAULT 'America/Sao_Paulo'`);
             console.log('✅ Coluna timezone adicionada à tabela de inscritos (ou já existia).');
+        } catch(e) {}
+        
+        try {
+            await pool.execute(`ALTER TABLE subscribers ADD COLUMN topic VARCHAR(100) DEFAULT 'tecnologia'`);
+            console.log('✅ Coluna topic adicionada à tabela de inscritos (ou já existia).');
         } catch(e) {}
 
         console.log('✅ Banco de dados TiDB conectado e pronto na Nuvem.');
@@ -60,22 +66,23 @@ initDB();
 // ROUTES
 // ========================
 app.post('/subscribe', async (req, res) => {
-    const { email, timezone } = req.body;
+    const { email, timezone, topic } = req.body;
     if (!email || !email.includes('@')) {
         return res.status(400).json({ error: 'Email inválido.' });
     }
 
     const userTZ = timezone || 'America/Sao_Paulo';
+    const userTopic = topic || 'tecnologia';
 
     try {
-        await pool.execute(`INSERT INTO subscribers (email, timezone) VALUES (?, ?)`, [email, userTZ]);
+        await pool.execute(`INSERT INTO subscribers (email, timezone, topic) VALUES (?, ?, ?)`, [email, userTZ, userTopic]);
         res.status(200).json({ message: 'Inscrito com sucesso! Verifique seu email em alguns instantes.' });
         
         // Garante que o cron para esse fuso horário está rodando
         scheduleCronForTimezone(userTZ);
 
         // Dispara o email imediatamente de forma assíncrona
-        sendWelcomeNewsletter(email);
+        sendWelcomeNewsletter(email, userTopic);
     } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'Este email já está inscrito!' });
@@ -87,7 +94,7 @@ app.post('/subscribe', async (req, res) => {
 
 app.get('/subscribers', async (req, res) => {
     try {
-        const [rows] = await pool.query(`SELECT id, email, timezone, subscribed_at FROM subscribers`);
+        const [rows] = await pool.query(`SELECT id, email, timezone, topic, subscribed_at FROM subscribers`);
         res.status(200).json({
             total: rows.length,
             subscribers: rows
@@ -177,7 +184,7 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-function buildEmailHtml(newsBR, newsUS, newsRU) {
+function buildEmailHtml(newsBR, newsUS, newsRU, topic = 'tecnologia') {
     const escapeHtml = (unsafe) => {
         if (!unsafe) return '';
         return unsafe
@@ -214,7 +221,7 @@ function buildEmailHtml(newsBR, newsUS, newsRU) {
         </div>
         
         <div style="padding: 30px;">
-            <h2 style="color: #60a5fa; text-align: center; margin-top: 0;">Sua Dose Diária de Tecnologia 🌎</h2>
+            <h2 style="color: #60a5fa; text-align: center; margin-top: 0;">${topic === 'financas' ? 'Sua Dose Diária de Finanças 🌎' : 'Sua Dose Diária de Tecnologia 🌎'}</h2>
             <p style="text-align: center; color: #94a3b8; margin-bottom: 30px;">Aqui estão as 9 notícias mais quentes de hoje, diretamente do Brasil, EUA e Rússia.</p>
 
             <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #34d399;">🇧🇷 Notícias do Brasil</h2>
@@ -229,7 +236,7 @@ function buildEmailHtml(newsBR, newsUS, newsRU) {
         
         <div style="background-color: #1e293b; padding: 20px; text-align: center; font-size: 12px; color: #64748b;">
             <p>Enviado com ❤️ por nogmath185@gmail.com</p>
-            <p>© ${new Date().getFullYear()} Global TechNews. Todos os direitos reservados.</p>
+            <p>© ${new Date().getFullYear()} Global ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}. Todos os direitos reservados.</p>
         </div>
     </div>
     `;
@@ -238,20 +245,9 @@ function buildEmailHtml(newsBR, newsUS, newsRU) {
 async function processAndSendNewsletter(tz = null) {
     console.log(`Iniciando processamento da newsletter diária${tz ? ` para o fuso ${tz}` : ''}...`);
     
-    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-    const newsBR = await fetchFromBraveSearch('tecnologia', 'br', 3);
-    await sleep(2000); // Evitar limite de 1 requisição por segundo da API grátis do Brave
-    const newsUS = await fetchFromBraveSearch('technology', 'us', 3);
-    await sleep(2000);
-    const newsRU = await fetchFromBraveSearch('технологии', 'ru', 3);
-
-    // 2. Montar HTML
-    const htmlContent = buildEmailHtml(newsBR, newsUS, newsRU);
-
     // 3. Buscar inscritos
     try {
-        let query = `SELECT email FROM subscribers`;
+        let query = `SELECT email, topic FROM subscribers`;
         let params = [];
         if (tz) {
             query += ` WHERE timezone = ?`;
@@ -264,52 +260,83 @@ async function processAndSendNewsletter(tz = null) {
             return;
         }
 
-        const bccEmails = rows.map(row => row.email).join(', ');
-        
-        console.log(`Enviando email para: ${bccEmails}`);
+        // Agrupa os emails pelo tópico escolhido
+        const subscribersByTopic = rows.reduce((acc, row) => {
+            const t = row.topic || 'tecnologia';
+            if (!acc[t]) acc[t] = [];
+            acc[t].push(row.email);
+            return acc;
+        }, {});
 
-        // 4. Enviar email usando nodemailer
-        const mailOptions = {
-            from: 'nogmath185@gmail.com',
-            bcc: bccEmails,
-            subject: `🌎 TechNews: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
-            html: htmlContent,
-            attachments: [{
-                filename: 'Banner.png',
-                path: path.join(__dirname, 'Banner.png'),
-                cid: 'banner' // Este ID é usado no HTML src="cid:banner"
-            }]
-        };
+        for (const [topic, emails] of Object.entries(subscribersByTopic)) {
+            const bccEmails = emails.join(', ');
+            console.log(`Processando tópico '${topic}' para: ${bccEmails}`);
 
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            console.log('Newsletter enviada com sucesso! ID:', info.messageId);
-        } catch (error) {
-            console.error('Erro ao enviar newsletter:', error);
-            console.log('DICA: Você configurou sua Senha de App do Gmail corretamente?');
+            const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const queries = {
+                tecnologia: { br: 'tecnologia', us: 'technology', ru: 'технологии' },
+                financas: { br: 'finanças mercado', us: 'finance market', ru: 'финансы экономика' }
+            };
+            const q = queries[topic] || queries['tecnologia'];
+
+            const newsBR = await fetchFromBraveSearch(q.br, 'br', 3);
+            await sleep(2000);
+            const newsUS = await fetchFromBraveSearch(q.us, 'us', 3);
+            await sleep(2000);
+            const newsRU = await fetchFromBraveSearch(q.ru, 'ru', 3);
+
+            // 2. Montar HTML com o tópico correto
+            const htmlContent = buildEmailHtml(newsBR, newsUS, newsRU, topic);
+
+            // 4. Enviar email usando nodemailer
+            const mailOptions = {
+                from: 'nogmath185@gmail.com',
+                bcc: bccEmails,
+                subject: `🌎 ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
+                html: htmlContent,
+                attachments: [{
+                    filename: 'Banner.png',
+                    path: path.join(__dirname, 'Banner.png'),
+                    cid: 'banner'
+                }]
+            };
+
+            try {
+                const info = await transporter.sendMail(mailOptions);
+                console.log(`Newsletter '${topic}' enviada com sucesso! ID: ${info.messageId}`);
+            } catch (error) {
+                console.error(`Erro ao enviar newsletter '${topic}':`, error);
+                console.log('DICA: Você configurou sua Senha de App do Gmail corretamente?');
+            }
         }
     } catch (err) {
-        console.error('Erro ao buscar inscritos:', err);
+        console.error('Erro ao buscar inscritos e processar newsletter:', err);
     }
 }
 
-async function sendWelcomeNewsletter(email) {
-    console.log(`Enviando newsletter de boas-vindas para: ${email}...`);
+async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
+    console.log(`Enviando newsletter de boas-vindas para: ${email} (Tópico: ${topic})...`);
     try {
         const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-        const newsBR = await fetchFromBraveSearch('tecnologia', 'br', 3);
-        await sleep(2000); // Evitar limite de 1 req/sec
-        const newsUS = await fetchFromBraveSearch('technology', 'us', 3);
-        await sleep(2000);
-        const newsRU = await fetchFromBraveSearch('технологии', 'ru', 3);
+        const queries = {
+            tecnologia: { br: 'tecnologia', us: 'technology', ru: 'технологии' },
+            financas: { br: 'finanças mercado', us: 'finance market', ru: 'финансы экономика' }
+        };
+        const q = queries[topic] || queries['tecnologia'];
 
-        const htmlContent = buildEmailHtml(newsBR, newsUS, newsRU);
+        const newsBR = await fetchFromBraveSearch(q.br, 'br', 3);
+        await sleep(2000); // Evitar limite de 1 req/sec
+        const newsUS = await fetchFromBraveSearch(q.us, 'us', 3);
+        await sleep(2000);
+        const newsRU = await fetchFromBraveSearch(q.ru, 'ru', 3);
+
+        const htmlContent = buildEmailHtml(newsBR, newsUS, newsRU, topic);
 
         const mailOptions = {
             from: 'nogmath185@gmail.com',
             to: email, // Enviando direto para quem acabou de se inscrever
-            subject: `🎉 Bem-vindo(a) ao Global TechNews! Aqui estão as notícias de hoje`,
+            subject: `🎉 Bem-vindo(a) ao Global ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}!`,
             html: htmlContent,
             attachments: [{
                 filename: 'Banner.png',

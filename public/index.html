@@ -144,7 +144,7 @@
             gap: 1rem;
         }
 
-        input {
+        input, select {
             width: 100%;
             padding: 1rem 1.2rem;
             border-radius: 12px;
@@ -156,9 +156,14 @@
             transition: all 0.3s ease;
         }
 
-        input:focus {
+        input:focus, select:focus {
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        select option {
+            background-color: var(--bg-color);
+            color: white;
         }
 
         button {
@@ -223,6 +228,7 @@
             }
 
             input,
+            select,
             button {
                 padding: 0.85rem 1rem;
             }
@@ -240,10 +246,15 @@
             onerror="this.src='https://via.placeholder.com/80/3b82f6/ffffff?text=TN'">
 
         <h1>Global TechNews</h1>
-        <p>Receba diariamente 9 notícias de tecnologia curadas diretamente no seu email. Fontes do Brasil, EUA e Rússia.
+        <p>Receba diariamente 9 notícias curadas diretamente no seu email. Fontes do Brasil, EUA e Rússia.
         </p>
 
         <form id="subscribeForm">
+            <select id="topic" required>
+                <option value="" disabled selected>Escolha o seu nicho preferido...</option>
+                <option value="tecnologia">👨‍💻 Tecnologia (Programação, IA, Hardware)</option>
+                <option value="financas">📈 Finanças (Mercado Financeiro, Economia)</option>
+            </select>
             <input type="email" id="email" placeholder="Seu melhor email..." required>
             <button type="submit">Inscrever-se gratuitamente</button>
         </form>
@@ -254,6 +265,7 @@
         document.getElementById('subscribeForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const emailInput = document.getElementById('email');
+            const topicInput = document.getElementById('topic');
             const button = e.target.querySelector('button');
             const statusMessage = document.getElementById('statusMessage');
 
@@ -267,7 +279,11 @@
                 const response = await fetch('/subscribe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: emailInput.value, timezone: userTimezone })
+                    body: JSON.stringify({ 
+                        email: emailInput.value, 
+                        timezone: userTimezone,
+                        topic: topicInput.value 
+                    })
                 });
 
                 const data = await response.json();
