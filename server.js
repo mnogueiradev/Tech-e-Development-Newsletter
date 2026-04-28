@@ -11,9 +11,49 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10kb' })); // Limita payload a 10kb para evitar ataques
 app.use(express.static('public'));
-app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png'))); // Server banner to frontend
+app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
+
+// ========================
+// SEGURANÇA
+// ========================
+
+// Rate Limiter simples (sem biblioteca externa) - máx 5 requisições por IP a cada 15 min
+const subscribeAttempts = new Map();
+function rateLimiter(req, res, next) {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const windowMs = 15 * 60 * 1000; // 15 minutos
+    const maxAttempts = 5;
+
+    const record = subscribeAttempts.get(ip);
+    if (record) {
+        // Remove tentativas antigas fora da janela de tempo
+        record.timestamps = record.timestamps.filter(t => now - t < windowMs);
+        if (record.timestamps.length >= maxAttempts) {
+            return res.status(429).json({ error: 'Muitas tentativas. Tente novamente em 15 minutos.' });
+        }
+        record.timestamps.push(now);
+    } else {
+        subscribeAttempts.set(ip, { timestamps: [now] });
+    }
+    next();
+}
+
+// Middleware de autenticação para rotas de administrador
+function requireAdmin(req, res, next) {
+    const token = req.query.token || req.headers['x-admin-token'];
+    const adminToken = process.env.ADMIN_TOKEN;
+
+    if (!adminToken) {
+        return res.status(500).json({ error: 'ADMIN_TOKEN não configurado no servidor.' });
+    }
+    if (!token || token !== adminToken) {
+        return res.status(403).json({ error: 'Acesso negado. Token inválido ou ausente.' });
+    }
+    next();
+}
 
 // ========================
 // DATABASE SETUP
@@ -45,12 +85,12 @@ async function initDB() {
         try {
             await pool.execute(`ALTER TABLE subscribers ADD COLUMN timezone VARCHAR(100) DEFAULT 'America/Sao_Paulo'`);
             console.log('✅ Coluna timezone adicionada à tabela de inscritos (ou já existia).');
-        } catch(e) {}
-        
+        } catch (e) { }
+
         try {
             await pool.execute(`ALTER TABLE subscribers ADD COLUMN topic VARCHAR(100) DEFAULT 'tecnologia'`);
             console.log('✅ Coluna topic adicionada à tabela de inscritos (ou já existia).');
-        } catch(e) {}
+        } catch (e) { }
 
         console.log('✅ Banco de dados TiDB conectado e pronto na Nuvem.');
 
@@ -65,23 +105,30 @@ initDB();
 // ========================
 // ROUTES
 // ========================
-app.post('/subscribe', async (req, res) => {
+app.post('/subscribe', rateLimiter, async (req, res) => {
     const { email, timezone, topic } = req.body;
-    if (!email || !email.includes('@')) {
+
+    // Validação robusta do email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || typeof email !== 'string' || !emailRegex.test(email) || email.length > 254) {
         return res.status(400).json({ error: 'Email inválido.' });
     }
 
-    const userTZ = timezone || 'America/Sao_Paulo';
-    const userTopic = topic || 'tecnologia';
+    // Validação do tópico (apenas valores permitidos)
+    const allowedTopics = ['tecnologia', 'financas'];
+    const userTopic = allowedTopics.includes(topic) ? topic : 'tecnologia';
+
+    // Validação do fuso horário (apenas string alfanumérica com / e _)
+    const tzRegex = /^[A-Za-z0-9/_\-+]+$/;
+    const userTZ = (timezone && tzRegex.test(timezone) && timezone.length < 50)
+        ? timezone
+        : 'America/Sao_Paulo';
 
     try {
         await pool.execute(`INSERT INTO subscribers (email, timezone, topic) VALUES (?, ?, ?)`, [email, userTZ, userTopic]);
         res.status(200).json({ message: 'Inscrito com sucesso! Verifique seu email em alguns instantes.' });
-        
-        // Garante que o cron para esse fuso horário está rodando
-        scheduleCronForTimezone(userTZ);
 
-        // Dispara o email imediatamente de forma assíncrona
+        scheduleCronForTimezone(userTZ);
         sendWelcomeNewsletter(email, userTopic);
     } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') {
@@ -92,7 +139,8 @@ app.post('/subscribe', async (req, res) => {
     }
 });
 
-app.get('/subscribers', async (req, res) => {
+// Rota protegida por token de administrador
+app.get('/subscribers', requireAdmin, async (req, res) => {
     try {
         const [rows] = await pool.query(`SELECT id, email, timezone, topic, subscribed_at FROM subscribers`);
         res.status(200).json({
@@ -104,7 +152,8 @@ app.get('/subscribers', async (req, res) => {
     }
 });
 
-app.get('/trigger-email', async (req, res) => {
+// Rota protegida por token de administrador
+app.get('/trigger-email', requireAdmin, async (req, res) => {
     try {
         await processAndSendNewsletter();
         res.send('Newsletter processada e enviada com sucesso! Verifique o console.');
@@ -125,7 +174,7 @@ async function fetchFromBraveSearch(query, country, count = 3) {
     }
 
     const url = `https://api.search.brave.com/res/v1/news/search?q=${encodeURIComponent(query)}&country=${country}&count=${count}&freshness=pd`;
-    
+
     // Tenta até 3 vezes caso dê erro de "fetch failed" ou 429
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
@@ -147,47 +196,20 @@ async function fetchFromBraveSearch(query, country, count = 3) {
             }
 
             const data = await response.json();
-            
+
             if (!data.results || data.results.length === 0) {
                 console.warn(`Aviso: Nenhuma notícia retornada para ${country}. Resposta completa:`, JSON.stringify(data).substring(0, 500));
                 return [];
             }
 
             console.log(`Buscado com sucesso: ${data.results.length} notícias para ${country}`);
-            return data.results.slice(0, count).map(item => {
-                let imgUrl = null;
-                
-                // 1. Tentar pegar a imagem original direto da API se existir
-                if (item.thumbnail && item.thumbnail.original) {
-                    imgUrl = item.thumbnail.original;
-                } 
-                // 2. Se não existir, pegar a URL do proxy do Brave e extrair a original
-                else if (item.thumbnail && item.thumbnail.src) {
-                    imgUrl = item.thumbnail.src;
-                    if (imgUrl.includes('imgs.search.brave.com')) {
-                        // O final da URL do Brave Proxy é a URL original em Base64
-                        const parts = imgUrl.split('/');
-                        const lastPart = parts[parts.length - 1];
-                        
-                        // aHR0cHM6 = https:// | aHR0cDov = http://
-                        if (lastPart && (lastPart.startsWith('aHR0cHM6') || lastPart.startsWith('aHR0cDov'))) {
-                            try {
-                                imgUrl = Buffer.from(lastPart, 'base64').toString('utf-8');
-                            } catch (e) {
-                                // Se falhar, mantém a do proxy
-                            }
-                        }
-                    }
-                }
-
-                return {
-                    title: item.title,
-                    link: item.url,
-                    description: item.description || '',
-                    image: imgUrl,
-                    source: (item.meta_url && item.meta_url.hostname) ? item.meta_url.hostname : 'Brave News'
-                };
-            });
+            return data.results.slice(0, count).map(item => ({
+                title: item.title,
+                link: item.url,
+                description: item.description || '',
+                image: (item.thumbnail && item.thumbnail.src) ? item.thumbnail.src : null,
+                source: (item.meta_url && item.meta_url.hostname) ? item.meta_url.hostname : 'Brave News'
+            }));
         } catch (err) {
             console.error(`Erro ao buscar notícias do Brave para ${country} (tentativa ${attempt}):`, err.message);
             if (attempt === 3) return [];
@@ -211,39 +233,29 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-function buildEmailHtml(newsBR, topic = 'tecnologia') {
+function buildEmailHtml(newsBR, newsUS, newsRU, topic = 'tecnologia') {
     const escapeHtml = (unsafe) => {
         if (!unsafe) return '';
         return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     };
 
     const renderNewsItem = (item) => `
-        <div style="margin-bottom: 30px; padding: 20px 0; border-bottom: 1px solid #e2e8f0;">
-            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <div style="margin-bottom: 30px; padding: 20px; background: rgba(255,255,255,0.05); border-left: 4px solid #3b82f6; border-radius: 0 8px 8px 0;">
+            ${item.image ? '<img src="' + item.image + '" alt="Imagem da notícia" style="width: 100%; max-height: 250px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;">' : ''}
+            <h3 style="margin: 0 0 10px 0; font-size: 20px; color: #f8fafc; line-height: 1.3;">${escapeHtml(item.title)}</h3>
+            ${item.description ? '<p style="margin: 0 0 15px 0; font-size: 15px; color: #cbd5e1; line-height: 1.6;">' + escapeHtml(item.description) + '</p>' : ''}
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
                 <tr>
-                    ${item.image ? `
-                    <td width="140" valign="top" style="padding-right: 15px; padding-top: 5px;">
-                        <img src="${item.image}" alt="Imagem da notícia" style="width: 140px; height: 100px; object-fit: cover; border-radius: 8px; display: block;">
-                    </td>
-                    ` : ''}
-                    <td valign="top">
-                        <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #000000; line-height: 1.3;">${escapeHtml(item.title)}</h3>
-                        ${item.description ? '<p style="margin: 0; font-size: 14px; color: #333333; line-height: 1.5;">' + escapeHtml(item.description) + '</p>' : ''}
-                    </td>
-                </tr>
-            </table>
-            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 15px;">
-                <tr>
-                    <td align="left" style="font-size: 13px; color: #666666;">
+                    <td align="left" style="font-size: 13px; color: #94a3b8;">
                         Fonte: <strong>${escapeHtml(item.source)}</strong>
                     </td>
                     <td align="right">
-                        <a href="${item.link}" style="color: #000000; text-decoration: none; font-size: 13px; font-weight: bold; padding: 6px 12px; background: #f1f5f9; border-radius: 6px; display: inline-block;">Ler ➔</a>
+                        <a href="${item.link}" style="color: #60a5fa; text-decoration: none; font-size: 14px; font-weight: bold; padding: 6px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; display: inline-block;">Ler na íntegra ➔</a>
                     </td>
                 </tr>
             </table>
@@ -251,23 +263,29 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     `;
 
     return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; color: #000000; overflow: hidden;">
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
         <!-- Banner Header -->
-        <div style="text-align: center; padding: 20px 0;">
+        <div style="text-align: center; background-color: #1e293b; padding: 20px;">
             <img src="cid:banner" alt="Newsletter Banner" style="max-width: 100%; height: auto; border-radius: 8px;">
         </div>
         
-        <div style="padding: 20px 0;">
-            <h2 style="color: #000000; text-align: center; margin-top: 0; font-size: 24px;">${topic === 'financas' ? 'Sua Dose Diária de Finanças' : 'Sua Dose Diária de Tecnologia'}</h2>
-            <p style="text-align: center; color: #666666; margin-bottom: 40px; font-size: 15px;">Aqui estão as 9 notícias mais quentes de hoje, diretamente das melhores fontes brasileiras.</p>
+        <div style="padding: 30px;">
+            <h2 style="color: #60a5fa; text-align: center; margin-top: 0;">${topic === 'financas' ? 'Sua Dose Diária de Finanças 🌎' : 'Sua Dose Diária de Tecnologia 🌎'}</h2>
+            <p style="text-align: center; color: #94a3b8; margin-bottom: 30px;">Aqui estão as 9 notícias mais quentes de hoje, diretamente do Brasil, EUA e Rússia.</p>
 
-            <h2 style="border-bottom: 2px solid #000000; padding-bottom: 10px; color: #000000; font-size: 22px;">Principais Notícias</h2>
+            <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #34d399;">🇧🇷 Notícias do Brasil</h2>
             ${newsBR.map(renderNewsItem).join('')}
+
+            <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #f87171; margin-top: 30px;">🇺🇸 Notícias dos EUA</h2>
+            ${newsUS.map(renderNewsItem).join('')}
+
+            <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #fbbf24; margin-top: 30px;">🇷🇺 Notícias da Rússia</h2>
+            ${newsRU.map(renderNewsItem).join('')}
         </div>
         
-        <div style="background-color: #f8fafc; padding: 30px 20px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e2e8f0; border-radius: 8px; margin-top: 20px;">
+        <div style="background-color: #1e293b; padding: 20px; text-align: center; font-size: 12px; color: #64748b;">
             <p>Enviado com ❤️ por nogmath185@gmail.com</p>
-            <p>© ${new Date().getFullYear()} Tech &amp; Development Newsletter. Todos os direitos reservados.</p>
+            <p>© ${new Date().getFullYear()} Global ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}. Todos os direitos reservados.</p>
         </div>
     </div>
     `;
@@ -275,7 +293,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
 
 async function processAndSendNewsletter(tz = null) {
     console.log(`Iniciando processamento da newsletter diária${tz ? ` para o fuso ${tz}` : ''}...`);
-    
+
     // 3. Buscar inscritos
     try {
         let query = `SELECT email, topic FROM subscribers`;
@@ -310,16 +328,20 @@ async function processAndSendNewsletter(tz = null) {
             };
             const q = queries[topic] || queries['tecnologia'];
 
-            const newsBR = await fetchFromBraveSearch(q.br, 'br', 9);
+            const newsBR = await fetchFromBraveSearch(q.br, 'br', 3);
+            await sleep(2000);
+            const newsUS = await fetchFromBraveSearch(q.us, 'us', 3);
+            await sleep(2000);
+            const newsRU = await fetchFromBraveSearch(q.ru, 'ru', 3);
 
             // 2. Montar HTML com o tópico correto
-            const htmlContent = buildEmailHtml(newsBR, topic);
+            const htmlContent = buildEmailHtml(newsBR, newsUS, newsRU, topic);
 
             // 4. Enviar email usando nodemailer
             const mailOptions = {
                 from: 'nogmath185@gmail.com',
                 bcc: bccEmails,
-                subject: `🌎 Tech & Development Newsletter: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
+                subject: `🌎 ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                 html: htmlContent,
                 attachments: [{
                     filename: 'Banner.png',
@@ -344,20 +366,26 @@ async function processAndSendNewsletter(tz = null) {
 async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
     console.log(`Enviando newsletter de boas-vindas para: ${email} (Tópico: ${topic})...`);
     try {
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
         const queries = {
             tecnologia: { br: 'tecnologia', us: 'technology', ru: 'технологии' },
             financas: { br: 'finanças mercado', us: 'finance market', ru: 'финансы экономика' }
         };
         const q = queries[topic] || queries['tecnologia'];
 
-        const newsBR = await fetchFromBraveSearch(q.br, 'br', 9);
+        const newsBR = await fetchFromBraveSearch(q.br, 'br', 3);
+        await sleep(2000); // Evitar limite de 1 req/sec
+        const newsUS = await fetchFromBraveSearch(q.us, 'us', 3);
+        await sleep(2000);
+        const newsRU = await fetchFromBraveSearch(q.ru, 'ru', 3);
 
-        const htmlContent = buildEmailHtml(newsBR, topic);
+        const htmlContent = buildEmailHtml(newsBR, newsUS, newsRU, topic);
 
         const mailOptions = {
             from: 'nogmath185@gmail.com',
             to: email, // Enviando direto para quem acabou de se inscrever
-            subject: `🎉 Bem-vindo(a) à Tech & Development Newsletter!`,
+            subject: `🎉 Bem-vindo(a) ao Global ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}!`,
             html: htmlContent,
             attachments: [{
                 filename: 'Banner.png',
@@ -380,14 +408,14 @@ const scheduledTimezones = new Set();
 
 function scheduleCronForTimezone(tz) {
     if (scheduledTimezones.has(tz)) return;
-    
+
     console.log(`⏰ Agendando disparo diário (08:00) para o fuso horário: ${tz}`);
-    
+
     cron.schedule('0 8 * * *', () => {
         console.log(`⏰ [CRON] Disparando newsletter das 08:00 para o fuso: ${tz}`);
         processAndSendNewsletter(tz);
     }, { timezone: tz });
-    
+
     scheduledTimezones.add(tz);
 }
 
