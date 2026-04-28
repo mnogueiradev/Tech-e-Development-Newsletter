@@ -92,8 +92,10 @@ app.post('/subscribe', async (req, res) => {
         // Garante que o cron para esse fuso horário está rodando
         scheduleCronForTimezone(userTZ);
 
-        // Dispara o email imediatamente de forma assíncrona
-        sendWelcomeNewsletter(email, userTopic);
+        // Dispara o email imediatamente de forma assíncrona (não await para não bloquear a resposta)
+        sendWelcomeNewsletter(email, userTopic).catch(err => {
+            console.error('Erro ao enviar email de boas-vindas (background):', err);
+        });
     } catch (err) {
         console.error('Erro ao salvar inscrição:', err);
         if (err.code === 'ER_DUP_ENTRY') {
@@ -324,8 +326,6 @@ async function processAndSendNewsletter(tz = null) {
 async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
     console.log(`Enviando newsletter de boas-vindas para: ${email} (Tópico: ${topic})...`);
     try {
-        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
         const queries = {
             tecnologia: 'tecnologia',
             financas: 'finanças mercado'
