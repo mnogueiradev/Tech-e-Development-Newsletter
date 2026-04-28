@@ -267,7 +267,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
         
         <div style="background-color: #f8fafc; padding: 30px 20px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e2e8f0; border-radius: 8px; margin-top: 20px;">
             <p>Enviado com ❤️ por nogmath185@gmail.com</p>
-            <p>© ${new Date().getFullYear()} Global ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}. Todos os direitos reservados.</p>
+            <p>© ${new Date().getFullYear()} Tech &amp; Development Newsletter. Todos os direitos reservados.</p>
         </div>
     </div>
     `;
@@ -319,7 +319,7 @@ async function processAndSendNewsletter(tz = null) {
             const mailOptions = {
                 from: 'nogmath185@gmail.com',
                 bcc: bccEmails,
-                subject: `🌎 ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
+                subject: `🌎 Tech & Development Newsletter: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                 html: htmlContent,
                 attachments: [{
                     filename: 'Banner.png',
@@ -357,7 +357,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         const mailOptions = {
             from: 'nogmath185@gmail.com',
             to: email, // Enviando direto para quem acabou de se inscrever
-            subject: `🎉 Bem-vindo(a) ao Global ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}!`,
+            subject: `🎉 Bem-vindo(a) à Tech & Development Newsletter!`,
             html: htmlContent,
             attachments: [{
                 filename: 'Banner.png',

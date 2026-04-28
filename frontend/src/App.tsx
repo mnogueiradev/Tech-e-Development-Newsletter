@@ -62,7 +62,7 @@ function App() {
         />
 
         <h1 className="font-extrabold text-3xl sm:text-4xl mb-2 bg-gradient-to-br from-blue-400 to-purple-400 bg-clip-text text-transparent">
-          Global TechNews
+          Tech &amp; Development Newsletter
         </h1>
 
         <p className="text-slate-400 text-sm sm:text-base leading-relaxed mb-8">
