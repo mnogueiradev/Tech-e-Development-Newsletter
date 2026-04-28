@@ -11,49 +11,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: '10kb' })); // Limita payload a 10kb para evitar ataques
+app.use(express.json());
 app.use(express.static('public'));
-app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
-
-// ========================
-// SEGURANÇA
-// ========================
-
-// Rate Limiter simples (sem biblioteca externa) - máx 5 requisições por IP a cada 15 min
-const subscribeAttempts = new Map();
-function rateLimiter(req, res, next) {
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-    const now = Date.now();
-    const windowMs = 15 * 60 * 1000; // 15 minutos
-    const maxAttempts = 5;
-
-    const record = subscribeAttempts.get(ip);
-    if (record) {
-        // Remove tentativas antigas fora da janela de tempo
-        record.timestamps = record.timestamps.filter(t => now - t < windowMs);
-        if (record.timestamps.length >= maxAttempts) {
-            return res.status(429).json({ error: 'Muitas tentativas. Tente novamente em 15 minutos.' });
-        }
-        record.timestamps.push(now);
-    } else {
-        subscribeAttempts.set(ip, { timestamps: [now] });
-    }
-    next();
-}
-
-// Middleware de autenticação para rotas de administrador
-function requireAdmin(req, res, next) {
-    const token = req.query.token || req.headers['x-admin-token'];
-    const adminToken = process.env.ADMIN_TOKEN;
-
-    if (!adminToken) {
-        return res.status(500).json({ error: 'ADMIN_TOKEN não configurado no servidor.' });
-    }
-    if (!token || token !== adminToken) {
-        return res.status(403).json({ error: 'Acesso negado. Token inválido ou ausente.' });
-    }
-    next();
-}
+app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png'))); // Server banner to frontend
 
 // ========================
 // DATABASE SETUP
@@ -105,30 +65,23 @@ initDB();
 // ========================
 // ROUTES
 // ========================
-app.post('/subscribe', rateLimiter, async (req, res) => {
+app.post('/subscribe', async (req, res) => {
     const { email, timezone, topic } = req.body;
-
-    // Validação robusta do email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || typeof email !== 'string' || !emailRegex.test(email) || email.length > 254) {
+    if (!email || !email.includes('@')) {
         return res.status(400).json({ error: 'Email inválido.' });
     }
 
-    // Validação do tópico (apenas valores permitidos)
-    const allowedTopics = ['tecnologia', 'financas'];
-    const userTopic = allowedTopics.includes(topic) ? topic : 'tecnologia';
-
-    // Validação do fuso horário (apenas string alfanumérica com / e _)
-    const tzRegex = /^[A-Za-z0-9/_\-+]+$/;
-    const userTZ = (timezone && tzRegex.test(timezone) && timezone.length < 50)
-        ? timezone
-        : 'America/Sao_Paulo';
+    const userTZ = timezone || 'America/Sao_Paulo';
+    const userTopic = topic || 'tecnologia';
 
     try {
         await pool.execute(`INSERT INTO subscribers (email, timezone, topic) VALUES (?, ?, ?)`, [email, userTZ, userTopic]);
         res.status(200).json({ message: 'Inscrito com sucesso! Verifique seu email em alguns instantes.' });
 
+        // Garante que o cron para esse fuso horário está rodando
         scheduleCronForTimezone(userTZ);
+
+        // Dispara o email imediatamente de forma assíncrona
         sendWelcomeNewsletter(email, userTopic);
     } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') {
@@ -139,8 +92,7 @@ app.post('/subscribe', rateLimiter, async (req, res) => {
     }
 });
 
-// Rota protegida por token de administrador
-app.get('/subscribers', requireAdmin, async (req, res) => {
+app.get('/subscribers', async (req, res) => {
     try {
         const [rows] = await pool.query(`SELECT id, email, timezone, topic, subscribed_at FROM subscribers`);
         res.status(200).json({
@@ -152,8 +104,7 @@ app.get('/subscribers', requireAdmin, async (req, res) => {
     }
 });
 
-// Rota protegida por token de administrador
-app.get('/trigger-email', requireAdmin, async (req, res) => {
+app.get('/trigger-email', async (req, res) => {
     try {
         await processAndSendNewsletter();
         res.send('Newsletter processada e enviada com sucesso! Verifique o console.');
