@@ -154,13 +154,40 @@ async function fetchFromBraveSearch(query, country, count = 3) {
             }
 
             console.log(`Buscado com sucesso: ${data.results.length} notícias para ${country}`);
-            return data.results.slice(0, count).map(item => ({
-                title: item.title,
-                link: item.url,
-                description: item.description || '',
-                image: (item.thumbnail && item.thumbnail.src) ? item.thumbnail.src : null,
-                source: (item.meta_url && item.meta_url.hostname) ? item.meta_url.hostname : 'Brave News'
-            }));
+            return data.results.slice(0, count).map(item => {
+                let imgUrl = null;
+                
+                // 1. Tentar pegar a imagem original direto da API se existir
+                if (item.thumbnail && item.thumbnail.original) {
+                    imgUrl = item.thumbnail.original;
+                } 
+                // 2. Se não existir, pegar a URL do proxy do Brave e extrair a original
+                else if (item.thumbnail && item.thumbnail.src) {
+                    imgUrl = item.thumbnail.src;
+                    if (imgUrl.includes('imgs.search.brave.com')) {
+                        // O final da URL do Brave Proxy é a URL original em Base64
+                        const parts = imgUrl.split('/');
+                        const lastPart = parts[parts.length - 1];
+                        
+                        // aHR0cHM6 = https:// | aHR0cDov = http://
+                        if (lastPart && (lastPart.startsWith('aHR0cHM6') || lastPart.startsWith('aHR0cDov'))) {
+                            try {
+                                imgUrl = Buffer.from(lastPart, 'base64').toString('utf-8');
+                            } catch (e) {
+                                // Se falhar, mantém a do proxy
+                            }
+                        }
+                    }
+                }
+
+                return {
+                    title: item.title,
+                    link: item.url,
+                    description: item.description || '',
+                    image: imgUrl,
+                    source: (item.meta_url && item.meta_url.hostname) ? item.meta_url.hostname : 'Brave News'
+                };
+            });
         } catch (err) {
             console.error(`Erro ao buscar notícias do Brave para ${country} (tentativa ${attempt}):`, err.message);
             if (attempt === 3) return [];
@@ -197,16 +224,26 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
 
     const renderNewsItem = (item) => `
         <div style="margin-bottom: 30px; padding: 20px 0; border-bottom: 1px solid #e2e8f0;">
-            ${item.image ? '<img src="' + item.image + '" alt="Imagem da notícia" style="width: 100%; max-height: 250px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;">' : ''}
-            <h3 style="margin: 0 0 10px 0; font-size: 20px; color: #000000; line-height: 1.3;">${escapeHtml(item.title)}</h3>
-            ${item.description ? '<p style="margin: 0 0 15px 0; font-size: 15px; color: #333333; line-height: 1.6;">' + escapeHtml(item.description) + '</p>' : ''}
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                    ${item.image ? `
+                    <td width="140" valign="top" style="padding-right: 15px; padding-top: 5px;">
+                        <img src="${item.image}" alt="Imagem da notícia" style="width: 140px; height: 100px; object-fit: cover; border-radius: 8px; display: block;">
+                    </td>
+                    ` : ''}
+                    <td valign="top">
+                        <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #000000; line-height: 1.3;">${escapeHtml(item.title)}</h3>
+                        ${item.description ? '<p style="margin: 0; font-size: 14px; color: #333333; line-height: 1.5;">' + escapeHtml(item.description) + '</p>' : ''}
+                    </td>
+                </tr>
+            </table>
             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 15px;">
                 <tr>
                     <td align="left" style="font-size: 13px; color: #666666;">
                         Fonte: <strong>${escapeHtml(item.source)}</strong>
                     </td>
                     <td align="right">
-                        <a href="${item.link}" style="color: #000000; text-decoration: none; font-size: 14px; font-weight: bold; padding: 6px 12px; background: #f1f5f9; border-radius: 6px; display: inline-block;">Ler na íntegra ➔</a>
+                        <a href="${item.link}" style="color: #000000; text-decoration: none; font-size: 13px; font-weight: bold; padding: 6px 12px; background: #f1f5f9; border-radius: 6px; display: inline-block;">Ler ➔</a>
                     </td>
                 </tr>
             </table>
