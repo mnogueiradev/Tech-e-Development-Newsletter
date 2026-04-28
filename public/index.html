@@ -75,16 +75,13 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 24px;
             padding: 3rem;
-            width: 90%;
-            /* Alterado de 100% para dar respiro nas laterais */
+            width: 100%;
             max-width: 480px;
             text-align: center;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             transform: translateY(20px);
             opacity: 0;
             animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            position: relative;
-            z-index: 1;
         }
 
         @keyframes slideUp {
@@ -120,8 +117,6 @@
 
         .features {
             display: flex;
-            flex-wrap: wrap;
-            /* Permite quebrar linha se não couber */
             justify-content: center;
             gap: 1rem;
             margin-bottom: 2rem;
@@ -135,7 +130,6 @@
             font-size: 0.85rem;
             font-weight: 600;
             border: 1px solid rgba(59, 130, 246, 0.2);
-            white-space: nowrap;
         }
 
         form {
@@ -144,7 +138,7 @@
             gap: 1rem;
         }
 
-        input, select {
+        input {
             width: 100%;
             padding: 1rem 1.2rem;
             border-radius: 12px;
@@ -156,14 +150,9 @@
             transition: all 0.3s ease;
         }
 
-        input:focus, select:focus {
+        input:focus {
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-        }
-
-        select option {
-            background-color: var(--bg-color);
-            color: white;
         }
 
         button {
@@ -202,37 +191,6 @@
         .error {
             color: #f87171;
         }
-
-        @media (max-width: 500px) {
-            .container {
-                padding: 2rem 1.5rem;
-                width: 95%;
-            }
-
-            h1 {
-                font-size: 1.8rem;
-            }
-
-            p {
-                font-size: 0.95rem;
-                margin-bottom: 1.5rem;
-            }
-
-            .features {
-                gap: 0.5rem;
-            }
-
-            .badge {
-                font-size: 0.75rem;
-                padding: 0.3rem 0.6rem;
-            }
-
-            input,
-            select,
-            button {
-                padding: 0.85rem 1rem;
-            }
-        }
     </style>
 </head>
 
@@ -246,15 +204,16 @@
             onerror="this.src='https://via.placeholder.com/80/3b82f6/ffffff?text=TN'">
 
         <h1>Global TechNews</h1>
-        <p>Receba diariamente 9 notícias curadas diretamente no seu email. Fontes do Brasil, EUA e Rússia.
+        <p>Receba diariamente 9 notícias de tecnologia curadas diretamente no seu email. As melhores fontes do Brasil.
         </p>
 
+        <div class="features">
+            <span class="badge">🇧🇷 3 BR</span>
+            <span class="badge">🇺🇸 3 EUA</span>
+            <span class="badge">🇷🇺 3 RU</span>
+        </div>
+
         <form id="subscribeForm">
-            <select id="topic" required>
-                <option value="" disabled selected>Escolha o seu nicho preferido...</option>
-                <option value="tecnologia">👨‍💻 Tecnologia (Programação, IA, Hardware)</option>
-                <option value="financas">📈 Finanças (Mercado Financeiro, Economia)</option>
-            </select>
             <input type="email" id="email" placeholder="Seu melhor email..." required>
             <button type="submit">Inscrever-se gratuitamente</button>
         </form>
@@ -265,12 +224,8 @@
         document.getElementById('subscribeForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const emailInput = document.getElementById('email');
-            const topicInput = document.getElementById('topic');
             const button = e.target.querySelector('button');
             const statusMessage = document.getElementById('statusMessage');
-
-            // Pega o fuso horário dinâmico do navegador do usuário
-            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
             button.innerText = 'Inscrevendo...';
             button.disabled = true;
@@ -279,11 +234,7 @@
                 const response = await fetch('/subscribe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        email: emailInput.value, 
-                        timezone: userTimezone,
-                        topic: topicInput.value 
-                    })
+                    body: JSON.stringify({ email: emailInput.value })
                 });
 
                 const data = await response.json();

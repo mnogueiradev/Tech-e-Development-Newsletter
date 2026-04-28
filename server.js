@@ -184,7 +184,7 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-function buildEmailHtml(newsBR, newsUS, newsRU, topic = 'tecnologia') {
+function buildEmailHtml(newsBR, topic = 'tecnologia') {
     const escapeHtml = (unsafe) => {
         if (!unsafe) return '';
         return unsafe
@@ -222,16 +222,10 @@ function buildEmailHtml(newsBR, newsUS, newsRU, topic = 'tecnologia') {
         
         <div style="padding: 30px;">
             <h2 style="color: #60a5fa; text-align: center; margin-top: 0;">${topic === 'financas' ? 'Sua Dose Diária de Finanças 🌎' : 'Sua Dose Diária de Tecnologia 🌎'}</h2>
-            <p style="text-align: center; color: #94a3b8; margin-bottom: 30px;">Aqui estão as 9 notícias mais quentes de hoje, diretamente do Brasil, EUA e Rússia.</p>
+            <p style="text-align: center; color: #94a3b8; margin-bottom: 30px;">Aqui estão as 9 notícias mais quentes de hoje, diretamente das melhores fontes brasileiras.</p>
 
-            <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #34d399;">🇧🇷 Notícias do Brasil</h2>
+            <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #34d399;">🇧🇷 Principais Notícias</h2>
             ${newsBR.map(renderNewsItem).join('')}
-
-            <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #f87171; margin-top: 30px;">🇺🇸 Notícias dos EUA</h2>
-            ${newsUS.map(renderNewsItem).join('')}
-
-            <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #fbbf24; margin-top: 30px;">🇷🇺 Notícias da Rússia</h2>
-            ${newsRU.map(renderNewsItem).join('')}
         </div>
         
         <div style="background-color: #1e293b; padding: 20px; text-align: center; font-size: 12px; color: #64748b;">
@@ -279,14 +273,10 @@ async function processAndSendNewsletter(tz = null) {
             };
             const q = queries[topic] || queries['tecnologia'];
 
-            const newsBR = await fetchFromBraveSearch(q.br, 'br', 3);
-            await sleep(2000);
-            const newsUS = await fetchFromBraveSearch(q.us, 'us', 3);
-            await sleep(2000);
-            const newsRU = await fetchFromBraveSearch(q.ru, 'ru', 3);
+            const newsBR = await fetchFromBraveSearch(q.br, 'br', 9);
 
             // 2. Montar HTML com o tópico correto
-            const htmlContent = buildEmailHtml(newsBR, newsUS, newsRU, topic);
+            const htmlContent = buildEmailHtml(newsBR, topic);
 
             // 4. Enviar email usando nodemailer
             const mailOptions = {
@@ -317,21 +307,15 @@ async function processAndSendNewsletter(tz = null) {
 async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
     console.log(`Enviando newsletter de boas-vindas para: ${email} (Tópico: ${topic})...`);
     try {
-        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
         const queries = {
             tecnologia: { br: 'tecnologia', us: 'technology', ru: 'технологии' },
             financas: { br: 'finanças mercado', us: 'finance market', ru: 'финансы экономика' }
         };
         const q = queries[topic] || queries['tecnologia'];
 
-        const newsBR = await fetchFromBraveSearch(q.br, 'br', 3);
-        await sleep(2000); // Evitar limite de 1 req/sec
-        const newsUS = await fetchFromBraveSearch(q.us, 'us', 3);
-        await sleep(2000);
-        const newsRU = await fetchFromBraveSearch(q.ru, 'ru', 3);
+        const newsBR = await fetchFromBraveSearch(q.br, 'br', 9);
 
-        const htmlContent = buildEmailHtml(newsBR, newsUS, newsRU, topic);
+        const htmlContent = buildEmailHtml(newsBR, topic);
 
         const mailOptions = {
             from: 'nogmath185@gmail.com',
