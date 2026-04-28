@@ -31,7 +31,9 @@ async function initDB() {
             ssl: { rejectUnauthorized: true }, // TiDB exige SSL
             waitForConnections: true,
             connectionLimit: 10,
-            queueLimit: 0
+            queueLimit: 0,
+            enableKeepAlive: true,
+            keepAliveInitialDelay: 0
         });
 
         await pool.execute(`CREATE TABLE IF NOT EXISTS subscribers (
@@ -53,6 +55,15 @@ async function initDB() {
         } catch (e) { }
 
         console.log('✅ Banco de dados TiDB conectado e pronto na Nuvem.');
+
+        // Keep-alive: evita cold start do TiDB Serverless executando uma query leve a cada 4 minutos
+        setInterval(async () => {
+            try {
+                await pool.execute('SELECT 1');
+            } catch (e) {
+                console.warn('⚠️ Keep-alive falhou, reconectando...', e.message);
+            }
+        }, 4 * 60 * 1000);
 
         // Carrega os cron jobs dinâmicos para cada fuso horário já cadastrado
         await loadSchedules();

@@ -29,8 +29,9 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            overflow: hidden;
+            overflow-y: auto;
             position: relative;
+            padding: 2rem 1rem;
         }
 
         /* Abstract Background Elements */
@@ -191,6 +192,45 @@
         .error {
             color: #f87171;
         }
+
+        .preview-section {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .preview-title {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .preview-image {
+            width: 100%;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: block;
+            margin: 0 auto;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+
+        .preview-gallery {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .preview-gallery img {
+            width: 100%;
+            max-width: 400px;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
     </style>
 </head>
 
@@ -200,7 +240,7 @@
 
     <div class="container">
         <!-- Ícone do banner como logo da página de cadastro -->
-        <img src="/Banner.png" alt="Logo" class="logo"
+        <img src="/image.png" alt="Logo" class="logo"
             onerror="this.src='https://via.placeholder.com/80/3b82f6/ffffff?text=TN'">
 
         <h1>Tech & Development Newsletter</h1>
@@ -212,6 +252,15 @@
             <button type="submit">Inscrever-se gratuitamente</button>
         </form>
         <div id="statusMessage" class="status"></div>
+
+        <div class="preview-section">
+            <p class="preview-title">Exemplo de como você receberá as notícias no seu email:</p>
+            <div class="preview-gallery">
+                <img src="/screenshot3.png" alt="Exemplo de newsletter 1">
+                <img src="/screenshot1.png" alt="Exemplo de newsletter 2">
+                <img src="/screenshot2.png" alt="Exemplo de newsletter 3">
+            </div>
+        </div>
     </div>
 
     <script>
