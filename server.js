@@ -196,17 +196,17 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     };
 
     const renderNewsItem = (item) => `
-        <div style="margin-bottom: 30px; padding: 20px; background: rgba(255,255,255,0.05); border-left: 4px solid #3b82f6; border-radius: 0 8px 8px 0;">
+        <div style="margin-bottom: 30px; padding: 20px 0; border-bottom: 1px solid #e2e8f0;">
             ${item.image ? '<img src="' + item.image + '" alt="Imagem da notícia" style="width: 100%; max-height: 250px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;">' : ''}
-            <h3 style="margin: 0 0 10px 0; font-size: 20px; color: #f8fafc; line-height: 1.3;">${escapeHtml(item.title)}</h3>
-            ${item.description ? '<p style="margin: 0 0 15px 0; font-size: 15px; color: #cbd5e1; line-height: 1.6;">' + escapeHtml(item.description) + '</p>' : ''}
-            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 20px; color: #000000; line-height: 1.3;">${escapeHtml(item.title)}</h3>
+            ${item.description ? '<p style="margin: 0 0 15px 0; font-size: 15px; color: #333333; line-height: 1.6;">' + escapeHtml(item.description) + '</p>' : ''}
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 15px;">
                 <tr>
-                    <td align="left" style="font-size: 13px; color: #94a3b8;">
+                    <td align="left" style="font-size: 13px; color: #666666;">
                         Fonte: <strong>${escapeHtml(item.source)}</strong>
                     </td>
                     <td align="right">
-                        <a href="${item.link}" style="color: #60a5fa; text-decoration: none; font-size: 14px; font-weight: bold; padding: 6px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; display: inline-block;">Ler na íntegra ➔</a>
+                        <a href="${item.link}" style="color: #000000; text-decoration: none; font-size: 14px; font-weight: bold; padding: 6px 12px; background: #f1f5f9; border-radius: 6px; display: inline-block;">Ler na íntegra ➔</a>
                     </td>
                 </tr>
             </table>
@@ -214,21 +214,21 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     `;
 
     return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; color: #000000; overflow: hidden;">
         <!-- Banner Header -->
-        <div style="text-align: center; background-color: #1e293b; padding: 20px;">
+        <div style="text-align: center; padding: 20px 0;">
             <img src="cid:banner" alt="Newsletter Banner" style="max-width: 100%; height: auto; border-radius: 8px;">
         </div>
         
-        <div style="padding: 30px;">
-            <h2 style="color: #60a5fa; text-align: center; margin-top: 0;">${topic === 'financas' ? 'Sua Dose Diária de Finanças 🌎' : 'Sua Dose Diária de Tecnologia 🌎'}</h2>
-            <p style="text-align: center; color: #94a3b8; margin-bottom: 30px;">Aqui estão as 9 notícias mais quentes de hoje, diretamente das melhores fontes brasileiras.</p>
+        <div style="padding: 20px 0;">
+            <h2 style="color: #000000; text-align: center; margin-top: 0; font-size: 24px;">${topic === 'financas' ? 'Sua Dose Diária de Finanças' : 'Sua Dose Diária de Tecnologia'}</h2>
+            <p style="text-align: center; color: #666666; margin-bottom: 40px; font-size: 15px;">Aqui estão as 9 notícias mais quentes de hoje, diretamente das melhores fontes brasileiras.</p>
 
-            <h2 style="border-bottom: 1px solid #334155; padding-bottom: 10px; color: #34d399;">🇧🇷 Principais Notícias</h2>
+            <h2 style="border-bottom: 2px solid #000000; padding-bottom: 10px; color: #000000; font-size: 22px;">Principais Notícias</h2>
             ${newsBR.map(renderNewsItem).join('')}
         </div>
         
-        <div style="background-color: #1e293b; padding: 20px; text-align: center; font-size: 12px; color: #64748b;">
+        <div style="background-color: #f8fafc; padding: 30px 20px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e2e8f0; border-radius: 8px; margin-top: 20px;">
             <p>Enviado com ❤️ por nogmath185@gmail.com</p>
             <p>© ${new Date().getFullYear()} Global ${topic === 'financas' ? 'FinanceNews' : 'TechNews'}. Todos os direitos reservados.</p>
         </div>
