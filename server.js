@@ -95,10 +95,10 @@ app.post('/subscribe', async (req, res) => {
         // Dispara o email imediatamente de forma assíncrona
         sendWelcomeNewsletter(email, userTopic);
     } catch (err) {
+        console.error('Erro ao salvar inscrição:', err);
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'Este email já está inscrito!' });
         }
-        console.error(err);
         return res.status(500).json({ error: 'Erro interno ao salvar email.' });
     }
 });
