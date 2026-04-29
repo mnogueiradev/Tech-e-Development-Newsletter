@@ -21,9 +21,6 @@ app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
 // 🔐 VALIDAÇÃO ENV
 // ========================
 if (!process.env.TIDB_URL) throw new Error("TIDB_URL não configurada");
-if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    throw new Error("Credenciais de email não configuradas");
-}
 
 // ========================
 // 🗄️ DATABASE
