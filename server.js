@@ -108,7 +108,11 @@ transporter.verify((err) => {
 // ========================
 // 🚀 ROUTES
 // =======================
+
+
 app.post('/subscribe', async (req, res) => {
+    console.log("🧠 BODY COMPLETO:", req.body);
+
     const { email, timezone, topic } = req.body;
 
     console.log("📩 Novo subscribe:", email);
