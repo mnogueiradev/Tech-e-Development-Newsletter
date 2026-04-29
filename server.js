@@ -5,7 +5,6 @@ const cors = require('cors');
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,22 +12,25 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
-app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png'))); // Server banner to frontend
+app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
 
 // ========================
-// DATABASE SETUP
+// 🔐 VALIDAÇÃO ENV
 // ========================
+if (!process.env.TIDB_URL) throw new Error("TIDB_URL não configurada");
+if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    throw new Error("Credenciais de email não configuradas");
+}
+
+// ========================
+// 🗄️ DATABASE
+// =======================
 let pool;
 async function initDB() {
     try {
-        if (!process.env.TIDB_URL) {
-            console.warn('⚠️ AVISO: TIDB_URL não encontrada no .env. Por favor, adicione sua string de conexão do TiDB.');
-            return;
-        }
-
         pool = mysql.createPool({
             uri: process.env.TIDB_URL,
-            ssl: { rejectUnauthorized: true }, // TiDB exige SSL
+            ssl: { rejectUnauthorized: true },
             waitForConnections: true,
             connectionLimit: 10,
             queueLimit: 0,
@@ -54,30 +56,63 @@ async function initDB() {
             console.log('✅ Coluna topic adicionada à tabela de inscritos (ou já existia).');
         } catch (e) { }
 
-        console.log('✅ Banco de dados TiDB conectado e pronto na Nuvem.');
+        console.log('✅ Banco conectado');
 
-        // Keep-alive: evita cold start do TiDB Serverless executando uma query leve a cada 4 minutos
         setInterval(async () => {
             try {
                 await pool.execute('SELECT 1');
             } catch (e) {
-                console.warn('⚠️ Keep-alive falhou, reconectando...', e.message);
+                console.warn('⚠️ Keep-alive falhou:', e.message);
             }
         }, 4 * 60 * 1000);
 
-        // Carrega os cron jobs dinâmicos para cada fuso horário já cadastrado
         await loadSchedules();
     } catch (err) {
-        console.error('❌ Erro ao conectar no TiDB:', err.message);
+        console.error('❌ Erro no DB:', err.message);
+        process.exit(1);
     }
 }
 initDB();
 
 // ========================
-// ROUTES
+// 🔁 RETRY DB
 // ========================
+async function safeExecute(query, params, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await pool.execute(query, params);
+        } catch (err) {
+            console.error(`DB erro tentativa ${i + 1}:`, err.message);
+            if (i === retries - 1) throw err;
+            await new Promise(r => setTimeout(r, 1000));
+        }
+    }
+}
+
+// ========================
+// 📧 EMAIL
+// ========================
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD
+    }
+});
+
+transporter.verify((err) => {
+    if (err) console.error("Erro email:", err);
+    else console.log("✅ Email pronto");
+});
+
+// ========================
+// 🚀 ROUTES
+// =======================
 app.post('/subscribe', async (req, res) => {
     const { email, timezone, topic } = req.body;
+
+    console.log("📩 Novo subscribe:", email);
+
     if (!email || !email.includes('@')) {
         return res.status(400).json({ error: 'Email inválido.' });
     }
@@ -86,22 +121,27 @@ app.post('/subscribe', async (req, res) => {
     const userTopic = topic || 'tecnologia';
 
     try {
-        await pool.execute(`INSERT INTO subscribers (email, timezone, topic) VALUES (?, ?, ?)`, [email, userTZ, userTopic]);
-        res.status(200).json({ message: 'Inscrito com sucesso! Verifique seu email em alguns instantes.' });
+        await safeExecute(
+            `INSERT INTO subscribers (email, timezone, topic) VALUES (?, ?, ?)`,
+            [email, userTZ, userTopic]
+        );
 
-        // Garante que o cron para esse fuso horário está rodando
+        console.log("✅ Salvo no DB");
+
+        await sendWelcomeNewsletter(email, userTopic);
+
         scheduleCronForTimezone(userTZ);
 
-        // Dispara o email imediatamente de forma assíncrona (não await para não bloquear a resposta)
-        sendWelcomeNewsletter(email, userTopic).catch(err => {
-            console.error('Erro ao enviar email de boas-vindas (background):', err);
-        });
+        res.json({ success: true });
+
     } catch (err) {
-        console.error('Erro ao salvar inscrição:', err);
+        console.error("❌ Erro subscribe:", err);
+
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'Este email já está inscrito!' });
         }
-        return res.status(500).json({ error: 'Erro interno ao salvar email.' });
+
+        res.status(500).json({ error: 'Erro interno ao salvar email.' });
     }
 });
 
@@ -184,18 +224,8 @@ async function fetchFromBraveSearch(query, country, count = 3) {
 }
 
 // ========================
-// EMAIL SENDING LOGIC
-// ========================
-
-// CONFIGURAÇÃO DO EMAIL
-// ATENÇÃO: O usuário deve fornecer o EMAIL e SENHA DE APP no arquivo .env
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.GMAIL_USER || 'nogmath185@gmail.com',
-        pass: process.env.GMAIL_APP_PASSWORD || 'SUA_SENHA_DE_APP_GMAIL_AQUI'
-    }
-});
+// 📰 NEWS FETCHING
+// =======================
 
 function buildEmailHtml(newsBR, topic = 'tecnologia') {
     const escapeHtml = (unsafe) => {
@@ -324,7 +354,7 @@ async function processAndSendNewsletter(tz = null) {
 }
 
 async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
-    console.log(`Enviando newsletter de boas-vindas para: ${email} (Tópico: ${topic})...`);
+    console.log("📨 Enviando email para:", email);
     try {
         const queries = {
             tecnologia: 'tecnologia',
@@ -337,8 +367,8 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         const htmlContent = buildEmailHtml(newsBR, topic);
 
         const mailOptions = {
-            from: 'nogmath185@gmail.com',
-            to: email, // Enviando direto para quem acabou de se inscrever
+            from: `"Tech & Development Newsletter" <${process.env.GMAIL_USER}>`,
+            to: email,
             subject: `Bem-vindo(a) ao Tech & Development Newsletter!`,
             html: htmlContent,
             attachments: [{
@@ -349,24 +379,22 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log('Newsletter de boas-vindas enviada com sucesso! ID:', info.messageId);
+        console.log("✅ Email enviado:", info.messageId);
     } catch (error) {
-        console.error('Erro ao enviar newsletter de boas-vindas:', error);
+        console.error('❌ Erro ao enviar newsletter de boas-vindas:', error);
     }
 }
 
 // ========================
-// CRON JOB DINÂMICO
-// ========================
+// ⏰ CRON
+// =======================
 const scheduledTimezones = new Set();
 
 function scheduleCronForTimezone(tz) {
     if (scheduledTimezones.has(tz)) return;
 
-    console.log(`⏰ Agendando disparo diário (08:00) para o fuso horário: ${tz}`);
-
     cron.schedule('0 8 * * *', () => {
-        console.log(`⏰ [CRON] Disparando newsletter das 08:00 para o fuso: ${tz}`);
+        console.log(`⏰ Enviando newsletter (${tz})`);
         processAndSendNewsletter(tz);
     }, { timezone: tz });
 
@@ -386,10 +414,10 @@ async function loadSchedules() {
 }
 
 // ========================
-// START SERVER
-// ========================
+// START
+// =======================
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando na porta http://localhost:${PORT}`);
+    console.log(`🚀 Rodando na porta ${PORT}`);
     console.log(`Acesse http://localhost:${PORT} para se inscrever.`);
     console.log(`Acesse http://localhost:${PORT}/trigger-email para forçar o envio da newsletter imediatamente.`);
 });
