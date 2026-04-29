@@ -6,6 +6,13 @@ const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 const path = require('path');
 
+// Debug: mostra quais variáveis estão disponíveis
+console.log('🔍 Variáveis de ambiente disponíveis:');
+console.log('- TIDB_URL:', process.env.TIDB_URL ? '✅' : '❌');
+console.log('- GMAIL_USER:', process.env.GMAIL_USER ? '✅' : '❌');
+console.log('- GMAIL_APP_PASSWORD:', process.env.GMAIL_APP_PASSWORD ? '✅' : '❌');
+console.log('- BRAVE_API_KEY:', process.env.BRAVE_API_KEY ? '✅' : '❌');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
