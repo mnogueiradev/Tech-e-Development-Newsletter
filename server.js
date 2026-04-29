@@ -5,16 +5,12 @@ const cors = require('cors');
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 const path = require('path');
+const { Resend } = require('resend');
 
-// Debug: mostra quais variáveis estão disponíveis
-console.log('🔍 Variáveis de ambiente disponíveis:');
-console.log('- TIDB_URL:', process.env.TIDB_URL ? '✅' : '❌');
-console.log('- GMAIL_USER:', process.env.GMAIL_USER ? '✅' : '❌');
-console.log('- GMAIL_APP_PASSWORD:', process.env.GMAIL_APP_PASSWORD ? '✅' : '❌');
-console.log('- BRAVE_API_KEY:', process.env.BRAVE_API_KEY ? '✅' : '❌');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -348,7 +344,12 @@ async function processAndSendNewsletter(tz = null) {
             };
 
             try {
-                const info = await transporter.sendMail(mailOptions);
+                const info = await resend.emails.send({
+                    from: 'onboarding@resend.dev',
+                    to: emails, // pode ser array
+                    subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia`,
+                    html: htmlContent
+                });
                 console.log(`Newsletter '${topic}' enviada com sucesso! ID: ${info.messageId}`);
             } catch (error) {
                 console.error(`Erro ao enviar newsletter '${topic}':`, error);
@@ -361,34 +362,31 @@ async function processAndSendNewsletter(tz = null) {
 }
 
 async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
-    console.log("📨 Enviando email para:", email);
+    console.log(`📨 Enviando newsletter de boas-vindas para: ${email}`);
+
     try {
         const queries = {
             tecnologia: 'tecnologia',
             financas: 'finanças mercado'
         };
+
         const q = queries[topic] || queries['tecnologia'];
 
         const newsBR = await fetchFromBraveSearch(q, 'br', 9);
 
         const htmlContent = buildEmailHtml(newsBR, topic);
 
-        const mailOptions = {
-            from: `"Tech & Development Newsletter" <${process.env.GMAIL_USER}>`,
+        const response = await resend.emails.send({
+            from: 'onboarding@resend.dev', // padrão pra teste
             to: email,
-            subject: `Bem-vindo(a) ao Tech & Development Newsletter!`,
-            html: htmlContent,
-            attachments: [{
-                filename: 'Banner.png',
-                path: path.join(__dirname, 'Banner.png'),
-                cid: 'banner'
-            }]
-        };
+            subject: 'Bem-vindo ao Tech & Development Newsletter 🚀',
+            html: htmlContent
+        });
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log("✅ Email enviado:", info.messageId);
+        console.log("✅ Email enviado:", response);
+
     } catch (error) {
-        console.error('❌ Erro ao enviar newsletter de boas-vindas:', error);
+        console.error("❌ Erro ao enviar email:", error);
     }
 }
 
