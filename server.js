@@ -174,6 +174,62 @@ app.get('/trigger-email', async (req, res) => {
 // ========================
 // NEWS FETCHING LOGIC
 // ========================
+
+// Função para buscar notícias específicas do Olhar Digital
+async function fetchOlharDigitalNews(count = 1, topic = 'tecnologia') {
+    const apiKey = process.env.BRAVE_API_KEY;
+    if (!apiKey || apiKey === 'COLOQUE_SUA_CHAVE_AQUI') {
+        console.error('ERRO: Chave da API do Brave não configurada no .env');
+        return [];
+    }
+
+    // Usa a query específica para cada tópico
+    const topicQuery = topic === 'financas' ? 'finanças mercado' : 'tecnologia';
+    const url = `https://api.search.brave.com/res/v1/news/search?q=site:olhardigital.com.br%20${encodeURIComponent(topicQuery)}&country=br&count=${count}&freshness=pd`;
+
+    // Tenta até 3 vezes caso dê erro de "fetch failed" ou 429
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Accept-Encoding': 'gzip',
+                    'X-Subscription-Token': apiKey
+                }
+            });
+
+            if (!response.ok) {
+                console.error(`Erro ao buscar notícias do Olhar Digital (tentativa ${attempt}): ${response.status} - ${response.statusText}`);
+                if (response.status === 429) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    continue; // Tenta de novo se for Rate Limit
+                }
+                return [];
+            }
+
+            const data = await response.json();
+            if (!data.results || data.results.length === 0) {
+                console.warn('Nenhuma notícia do Olhar Digital encontrada');
+                return [];
+            }
+
+            console.log(`✅ Buscadas ${data.results.length} notícias do Olhar Digital (${topic})`);
+            return data.results.slice(0, count).map(item => ({
+                title: item.title,
+                link: item.url,
+                description: item.description || '',
+                image: (item.thumbnail && item.thumbnail.src) ? item.thumbnail.src : null,
+                source: 'Olhar Digital'
+            }));
+        } catch (err) {
+            console.error(`Erro ao buscar notícias do Olhar Digital (tentativa ${attempt}):`, err.message);
+            if (attempt === 3) return [];
+            await new Promise(r => setTimeout(r, 2000)); // Espera 2s antes de tentar de novo
+        }
+    }
+    return [];
+}
+
 async function fetchFromBraveSearch(query, country, count = 3) {
     const apiKey = process.env.BRAVE_API_KEY;
     if (!apiKey || apiKey === 'COLOQUE_SUA_CHAVE_AQUI') {
@@ -326,14 +382,23 @@ async function processAndSendNewsletter(tz = null) {
             };
             const q = queries[topic] || queries['tecnologia'];
 
-            const newsBR = await fetchFromBraveSearch(q, 'br', 9);
+            // Busca 1 notícia do Olhar Digital e 8 notícias gerais
+            const [olharNews, generalNews] = await Promise.all([
+                fetchOlharDigitalNews(1, topic),
+                fetchFromBraveSearch(q, 'br', 8)
+            ]);
+
+            // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
+            const newsBR = [...olharNews, ...generalNews].slice(0, 9);
+
+            console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
 
             // 2. Montar HTML com o tópico correto
             const htmlContent = buildEmailHtml(newsBR, topic);
 
             // 4. Enviar email usando nodemailer
             const mailOptions = {
-                from: 'nogmath185@gmail.com',
+                from: `"Tech & Development Newsletter" <${process.env.GMAIL_USER}>`,
                 bcc: bccEmails,
                 subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                 html: htmlContent,
@@ -345,12 +410,7 @@ async function processAndSendNewsletter(tz = null) {
             };
 
             try {
-                const info = await resend.emails.send({
-                    from: 'onboarding@resend.dev',
-                    to: emails, // pode ser array
-                    subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia`,
-                    html: htmlContent
-                });
+                const info = await transporter.sendMail(mailOptions);
                 console.log(`Newsletter '${topic}' enviada com sucesso! ID: ${info.messageId}`);
             } catch (error) {
                 console.error(`Erro ao enviar newsletter '${topic}':`, error);
@@ -373,18 +433,33 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 
         const q = queries[topic] || queries['tecnologia'];
 
-        const newsBR = await fetchFromBraveSearch(q, 'br', 9);
+        // Busca 1 notícia do Olhar Digital e 8 notícias gerais
+        const [olharNews, generalNews] = await Promise.all([
+            fetchOlharDigitalNews(1, topic),
+            fetchFromBraveSearch(q, 'br', 8)
+        ]);
+
+        // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
+        const newsBR = [...olharNews, ...generalNews].slice(0, 9);
+
+        console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
 
         const htmlContent = buildEmailHtml(newsBR, topic);
 
-        const response = await resend.emails.send({
-            from: 'onboarding@resend.dev', // padrão pra teste
+        const mailOptions = {
+            from: `"Tech & Development Newsletter" <${process.env.GMAIL_USER}>`,
             to: email,
-            subject: 'Bem-vindo ao Tech & Development Newsletter 🚀',
-            html: htmlContent
-        });
+            subject: `Bem-vindo(a) ao Tech & Development Newsletter!`,
+            html: htmlContent,
+            attachments: [{
+                filename: 'Banner.png',
+                path: path.join(__dirname, 'Banner.png'),
+                cid: 'banner'
+            }]
+        };
 
-        console.log("✅ Email enviado:", response);
+        const info = await transporter.sendMail(mailOptions);
+        console.log("✅ Email enviado:", info.messageId);
 
     } catch (error) {
         console.error("❌ Erro ao enviar email:", error);
