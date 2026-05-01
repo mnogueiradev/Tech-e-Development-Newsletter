@@ -10,7 +10,7 @@ const API_URL =
 export default function SubscribeForm() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   function isValidEmail(value: string): boolean {
@@ -32,7 +32,7 @@ export default function SubscribeForm() {
     }
 
     setLoading(true);
-    setSuccess(false);
+    setSuccess(null);
 
     try {
       const res = await fetch(API_URL, {
@@ -48,7 +48,7 @@ export default function SubscribeForm() {
         return;
       }
 
-      setSuccess(true);
+      setSuccess(data.message || "Inscrição realizada com sucesso! 🎉");
       setEmail("");
     } catch {
       setError("Erro de conexão. Tente novamente.");
@@ -110,7 +110,7 @@ export default function SubscribeForm() {
       )}
       {success && (
         <p className="text-green-400 text-sm text-center">
-          Inscrição realizada com sucesso! 🎉
+          {success}
         </p>
       )}
     </form>

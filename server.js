@@ -145,11 +145,14 @@ app.post('/subscribe', async (req, res) => {
 
         console.log("✅ Salvo no DB");
 
-        await sendWelcomeNewsletter(email, userTopic);
+        // Envia newsletter de boas-vindas (não bloqueia a resposta se falhar)
+        sendWelcomeNewsletter(email, userTopic).catch(err => {
+            console.error("⚠️ Erro ao enviar newsletter de boas-vindas:", err.message);
+        });
 
         scheduleCronForTimezone(userTZ);
 
-        res.json({ success: true });
+        res.json({ success: true, message: 'Inscrição realizada com sucesso!' });
 
     } catch (err) {
         console.error("❌ Erro subscribe:", err);
@@ -476,6 +479,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 
     } catch (error) {
         console.error("❌ Erro ao enviar email:", error);
+        throw error; // Propaga o erro para que o caller saiba que falhou
     }
 }
 
