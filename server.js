@@ -3,7 +3,6 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
-const nodemailer = require('nodemailer');
 const path = require('path');
 const { Resend } = require('resend');
 
@@ -12,7 +11,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-app.use(cors());
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
@@ -98,20 +100,8 @@ async function safeExecute(query, params, retries = 3) {
 }
 
 // ========================
-// 📧 EMAIL
-// ========================
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD
-    }
-});
-
-transporter.verify((err) => {
-    if (err) console.error("Erro email:", err);
-    else console.log("✅ Email pronto");
-});
+// 📧 EMAIL (Resend apenas)
+// =====================
 
 // ========================
 // 🚀 ROUTES
@@ -143,16 +133,22 @@ app.post('/subscribe', async (req, res) => {
             [email, userTZ, userTopic]
         );
 
-        console.log("✅ Salvo no DB");
+        console.log(" Salvo no DB");
 
-        await sendWelcomeNewsletter(email, userTopic);
+        const emailSent = await sendWelcomeNewsletter(email, userTopic);
+
+        if (!emailSent) {
+            return res.status(500).json({
+                error: "Falha ao enviar email"
+            });
+        }
 
         scheduleCronForTimezone(userTZ);
 
         res.json({ success: true });
 
     } catch (err) {
-        console.error("❌ Erro subscribe:", err);
+        console.error(" Erro subscribe:", err);
 
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'Este email já está inscrito!' });
@@ -459,23 +455,29 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 
         const htmlContent = buildEmailHtml(newsBR, topic);
 
-        const mailOptions = {
-            from: `"Tech & Development Newsletter" <${process.env.GMAIL_USER}>`,
-            to: email,
-            subject: `Bem-vindo(a) ao Tech & Development Newsletter!`,
+        // Envia email usando Resend
+        const { data, error } = await resend.emails.send({
+            from: 'Tech & Development Newsletter <onboarding@resend.dev>',
+            to: [email],
+            subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
             html: htmlContent,
             attachments: [{
                 filename: 'Banner.png',
                 path: path.join(__dirname, 'Banner.png'),
-                cid: 'banner'
             }]
-        };
+        });
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log("✅ Email enviado:", info.messageId);
+        if (error) {
+            console.error("❌ Erro ao enviar email via Resend:", error);
+            return false;
+        }
+
+        console.log("✅ Email enviado via Resend:", data.id);
+        return true;
 
     } catch (error) {
         console.error("❌ Erro ao enviar email:", error);
+        return false;
     }
 }
 
