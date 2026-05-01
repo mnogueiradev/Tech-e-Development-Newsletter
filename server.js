@@ -17,8 +17,13 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
 
-// Serve o frontend Next.js (static export) na raiz
-app.use(express.static(path.join(__dirname, 'frontend', 'out')));
+// Serve o frontend Next.js (static export) se existir
+try {
+    const fs = require('fs');
+    if (fs.existsSync(path.join(__dirname, 'frontend', 'out'))) {
+        app.use(express.static(path.join(__dirname, 'frontend', 'out')));
+    }
+} catch (e) {}
 
 // ========================
 // 🔐 VALIDAÇÃO ENV
@@ -112,6 +117,11 @@ transporter.verify((err) => {
 // 🚀 ROUTES
 // =======================
 
+
+// Rota de health check para o Render detectar o serviço
+app.get('/', (req, res) => {
+    res.json({ status: 'ok', message: 'API Tech & Development Newsletter rodando!' });
+});
 
 app.post('/subscribe', async (req, res) => {
     console.log("🧠 BODY COMPLETO:", req.body);
@@ -500,14 +510,6 @@ async function loadSchedules() {
 // ========================
 // START
 // =======================
-// Fallback SPA: qualquer rota GET não encontrada retorna o index.html do frontend
-app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email')) {
-        return next();
-    }
-    res.sendFile(path.join(__dirname, 'frontend', 'out', 'index.html'));
-});
-
 app.listen(PORT, () => {
     console.log(`🚀 Rodando na porta ${PORT}`);
     console.log(`Acesse http://localhost:${PORT} para se inscrever.`);
