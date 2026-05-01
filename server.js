@@ -14,8 +14,11 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
+
+// Serve o frontend Next.js (static export) na raiz
+app.use(express.static(path.join(__dirname, 'frontend', 'out')));
 
 // ========================
 // 🔐 VALIDAÇÃO ENV
@@ -497,6 +500,14 @@ async function loadSchedules() {
 // ========================
 // START
 // =======================
+// Fallback SPA: qualquer rota GET não encontrada retorna o index.html do frontend
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email')) {
+        return next();
+    }
+    res.sendFile(path.join(__dirname, 'frontend', 'out', 'index.html'));
+});
+
 app.listen(PORT, () => {
     console.log(`🚀 Rodando na porta ${PORT}`);
     console.log(`Acesse http://localhost:${PORT} para se inscrever.`);

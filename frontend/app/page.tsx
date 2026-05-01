@@ -1,6 +1,5 @@
 import SubscribeForm from "@/components/SubscribeForm";
 
-// Dados dos benefícios exibidos na seção abaixo do hero
 const benefits = [
   {
     icon: "📰",

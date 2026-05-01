@@ -2,9 +2,10 @@
 
 import { useState, FormEvent } from "react";
 
-// URL do backend (altere para a URL do Render em produção)
+// Em produção (Render), a API está no mesmo domínio, então usamos URL relativa
+// Em dev local, o backend roda em porta diferente
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/subscribe";
+  process.env.NEXT_PUBLIC_API_URL || "/subscribe";
 
 export default function SubscribeForm() {
   const [email, setEmail] = useState("");
@@ -12,7 +13,6 @@ export default function SubscribeForm() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  // Validação simples de email
   function isValidEmail(value: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   }
@@ -21,7 +21,6 @@ export default function SubscribeForm() {
     e.preventDefault();
     setError("");
 
-    // Validação frontend
     if (!email.trim()) {
       setError("Por favor, insira seu email.");
       return;
@@ -45,12 +44,10 @@ export default function SubscribeForm() {
       const data = await res.json();
 
       if (!res.ok) {
-        // Backend retorna { error: "..." }
         setError(data.error || "Erro ao cadastrar email.");
         return;
       }
 
-      // Sucesso
       setSuccess(true);
       setEmail("");
     } catch {
@@ -108,7 +105,6 @@ export default function SubscribeForm() {
         </button>
       </div>
 
-      {/* Feedback visual */}
       {error && (
         <p className="text-red-400 text-sm text-center">{error}</p>
       )}
