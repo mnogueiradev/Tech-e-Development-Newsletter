@@ -412,7 +412,7 @@ async function processAndSendNewsletter(tz = null) {
                 html: htmlContent,
                 attachments: [{
                     filename: 'Banner.png',
-                    path: path.join(__dirname, 'Banner.png'),
+                    content: require('fs').readFileSync(path.join(__dirname, 'Banner.png'))
                 }]
             });
 
@@ -459,7 +459,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
             html: htmlContent,
             attachments: [{
                 filename: 'Banner.png',
-                path: path.join(__dirname, 'Banner.png'),
+                content: require('fs').readFileSync(path.join(__dirname, 'Banner.png'))
             }]
         });
 
