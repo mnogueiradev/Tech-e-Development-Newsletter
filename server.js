@@ -335,7 +335,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
         <!-- Banner Header -->
         <div style="text-align: center; padding: 20px;">
-            <img src="cid:banner" alt="Newsletter Banner" style="max-width: 100%; height: auto; border-radius: 8px;">
+            <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png" alt="Newsletter Banner" style="max-width: 100%; height: auto; border-radius: 8px;">
         </div>
 
         <div style="padding: 30px;">
@@ -409,11 +409,7 @@ async function processAndSendNewsletter(tz = null) {
                 from: 'onboarding@resend.dev',
                 to: bccEmails, // Em modo de teste (onboarding), você não pode usar bcc para vários emails.
                 subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
-                html: htmlContent,
-                attachments: [{
-                    filename: 'Banner.png',
-                    content: require('fs').readFileSync(path.join(__dirname, 'Banner.png'))
-                }]
+                html: htmlContent
             });
 
             if (error) {
@@ -456,11 +452,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
             from: 'onboarding@resend.dev',
             to: [email],
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
-            html: htmlContent,
-            attachments: [{
-                filename: 'Banner.png',
-                content: require('fs').readFileSync(path.join(__dirname, 'Banner.png'))
-            }]
+            html: htmlContent
         });
 
         if (error) {
