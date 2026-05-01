@@ -405,10 +405,9 @@ async function processAndSendNewsletter(tz = null) {
             // 2. Montar HTML com o tópico correto
             const htmlContent = buildEmailHtml(newsBR, topic);
 
-            // 4. Enviar email usando Resend
             const { data, error } = await resend.emails.send({
-                from: 'noreply@resend.dev',
-                bcc: bccEmails,
+                from: 'onboarding@resend.dev',
+                to: bccEmails, // Em modo de teste (onboarding), você não pode usar bcc para vários emails.
                 subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                 html: htmlContent,
                 attachments: [{
@@ -454,7 +453,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 
         // Envia email usando Resend
         const { data, error } = await resend.emails.send({
-            from: 'noreply@resend.dev',
+            from: 'onboarding@resend.dev',
             to: [email],
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
             html: htmlContent,
