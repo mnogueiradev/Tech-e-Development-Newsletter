@@ -119,7 +119,7 @@ transporter.verify((err) => {
 
 
 // Rota de health check para o Render detectar o serviço
-app.get('/', (req, res) => {
+app.get('/api', (req, res) => {
     res.json({ status: 'ok', message: 'API Tech & Development Newsletter rodando!' });
 });
 
@@ -510,8 +510,137 @@ async function loadSchedules() {
 // ========================
 // START
 // =======================
+// Fallback SPA: serve frontend Next.js na rota raiz
+app.get('*', (req, res, next) => {
+    // Se for rota de API, continua normal
+    if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email') || req.path.startsWith('/api')) {
+        return next();
+    }
+    
+    // Tenta servir o frontend buildado
+    const frontendPath = path.join(__dirname, 'newsletter-frontend', '.next');
+    if (require('fs').existsSync(frontendPath)) {
+        // Se for modo dev do Next.js, redireciona para porta 3000
+        if (process.env.NODE_ENV !== 'production') {
+            return res.redirect('http://localhost:3000');
+        }
+    }
+    
+    // Se não tiver frontend, mostra página HTML simples
+    res.send(`
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tech Newsletter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900 min-h-screen flex items-center justify-center px-4">
+    <div class="max-w-md w-full space-y-8">
+        <div class="text-center space-y-4">
+            <h1 class="text-4xl sm:text-5xl font-bold text-white leading-tight">
+                Receba as principais notícias de <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">tecnologia</span> todos os dias
+            </h1>
+            <p class="text-gray-300 text-lg">
+                Fique por dentro das últimas novidades com nossa newsletter diária
+            </p>
+        </div>
+        
+        <form id="subscribeForm" class="space-y-6">
+            <div>
+                <input
+                    type="email"
+                    id="email"
+                    placeholder="seu@email.com"
+                    required
+                    class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+            </div>
+            
+            <button
+                type="submit"
+                id="submitBtn"
+                class="w-full py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg shadow-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-transparent transition-all duration-200"
+            >
+                Inscrever-se
+            </button>
+        </form>
+        
+        <div id="feedback" class="hidden rounded-lg p-4"></div>
+        
+        <div class="text-center text-gray-400 text-sm">
+            <p>Grátis • Sem spam • Cancelar quando quiser</p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('subscribeForm');
+        const emailInput = document.getElementById('email');
+        const submitBtn = document.getElementById('submitBtn');
+        const feedback = document.getElementById('feedback');
+
+        function showFeedback(message, isError = false) {
+            feedback.className = isError 
+                ? 'bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-300 text-center'
+                : 'bg-green-500/20 border border-green-500/30 rounded-lg p-4 text-green-300 text-center';
+            feedback.textContent = message;
+            feedback.classList.remove('hidden');
+        }
+
+        function isValidEmail(email) {
+            return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = emailInput.value.trim();
+            
+            if (!email) {
+                showFeedback('Por favor, insira seu email.', true);
+                return;
+            }
+            
+            if (!isValidEmail(email)) {
+                showFeedback('Email inválido. Verifique o formato.', true);
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="flex items-center justify-center gap-2"><svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>Inscrevendo...</span>';
+            
+            try {
+                const res = await fetch('/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                const data = await res.json();
+                
+                if (!res.ok) {
+                    showFeedback(data.error || 'Erro ao cadastrar email.', true);
+                } else {
+                    showFeedback('Inscrição realizada com sucesso! Verifique seu email 🎉', false);
+                    emailInput.value = '';
+                }
+            } catch {
+                showFeedback('Erro de conexão. Tente novamente.', true);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Inscrever-se';
+            }
+        });
+    </script>
+</body>
+</html>
+    `);
+});
+
 app.listen(PORT, () => {
     console.log(`🚀 Rodando na porta ${PORT}`);
     console.log(`Acesse http://localhost:${PORT} para se inscrever.`);
+    console.log(`Acesse http://localhost:${PORT}/api para health check.`);
     console.log(`Acesse http://localhost:${PORT}/trigger-email para forçar o envio da newsletter imediatamente.`);
 });
