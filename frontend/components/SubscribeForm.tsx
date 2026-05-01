@@ -2,10 +2,9 @@
 
 import { useState, FormEvent } from "react";
 
-// Em produção (Render), a API está no mesmo domínio, então usamos URL relativa
-// Em dev local, o backend roda em porta diferente
+// URL do backend no Render
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "/subscribe";
+  process.env.NEXT_PUBLIC_API_URL || "https://tech-e-development-newsletter.onrender.com/subscribe";
 
 export default function SubscribeForm() {
   const [email, setEmail] = useState("");
@@ -110,7 +109,7 @@ export default function SubscribeForm() {
       )}
       {success && (
         <p className="text-green-400 text-sm text-center">
-          Inscrição realizada com sucesso! 🎉
+          Inscrição realizada com sucesso! Verifique seu email 🎉
         </p>
       )}
     </form>
