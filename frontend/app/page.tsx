@@ -28,15 +28,15 @@ export default function Home() {
       <section className="flex-1 flex flex-col items-center justify-center px-6 py-20 text-center bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-tight mb-6">
           <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-            Receba as principais notícias
+            Tech & Development
           </span>
           <br />
-          de tecnologia todos os dias
+          Newsletter
         </h1>
 
         <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mb-10">
+          Fique por dentro das últimas novidades de tecnologia e desenvolvimento.
           Curadoria diária das 9 notícias mais relevantes, direto no seu email.
-          Grátis, sem spam e sem enrolação.
         </p>
 
         <SubscribeForm />
