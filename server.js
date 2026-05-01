@@ -405,25 +405,22 @@ async function processAndSendNewsletter(tz = null) {
             // 2. Montar HTML com o tópico correto
             const htmlContent = buildEmailHtml(newsBR, topic);
 
-            // 4. Enviar email usando nodemailer
-            const mailOptions = {
-                from: `"Tech & Development Newsletter" <${process.env.GMAIL_USER}>`,
+            // 4. Enviar email usando Resend
+            const { data, error } = await resend.emails.send({
+                from: 'noreply@resend.dev',
                 bcc: bccEmails,
                 subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                 html: htmlContent,
                 attachments: [{
                     filename: 'Banner.png',
                     path: path.join(__dirname, 'Banner.png'),
-                    cid: 'banner'
                 }]
-            };
+            });
 
-            try {
-                const info = await transporter.sendMail(mailOptions);
-                console.log(`Newsletter '${topic}' enviada com sucesso! ID: ${info.messageId}`);
-            } catch (error) {
-                console.error(`Erro ao enviar newsletter '${topic}':`, error);
-                console.log('DICA: Você configurou sua Senha de App do Gmail corretamente?');
+            if (error) {
+                console.error(`Erro ao enviar newsletter '${topic}' via Resend:`, error);
+            } else {
+                console.log(`Newsletter '${topic}' enviada com sucesso! ID: ${data.id}`);
             }
         }
     } catch (err) {
@@ -457,7 +454,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 
         // Envia email usando Resend
         const { data, error } = await resend.emails.send({
-            from: 'Tech & Development Newsletter <onboarding@resend.dev>',
+            from: 'noreply@resend.dev',
             to: [email],
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
             html: htmlContent,
