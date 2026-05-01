@@ -511,7 +511,7 @@ async function loadSchedules() {
 // START
 // =======================
 // Fallback SPA: serve frontend Next.js na rota raiz
-app.get('*', (req, res, next) => {
+app.get(/.*/, (req, res, next) => {
     // Se for rota de API, continua normal
     if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email') || req.path.startsWith('/api')) {
         return next();
