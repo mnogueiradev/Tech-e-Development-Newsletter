@@ -192,9 +192,9 @@ async function fetchOlharDigitalNews(count = 1, topic = 'tecnologia') {
         return [];
     }
 
-    // Usa a query específica para cada tópico
+    // Usa a query específica para cada tópico, e pede mais resultados para podermos filtrar os que têm imagem
     const topicQuery = topic === 'financas' ? 'finanças mercado' : 'tecnologia';
-    const url = `https://api.search.brave.com/res/v1/news/search?q=site:olhardigital.com.br%20${encodeURIComponent(topicQuery)}&country=br&count=${count}&freshness=pd`;
+    const url = `https://api.search.brave.com/res/v1/news/search?q=site:olhardigital.com.br%20${encodeURIComponent(topicQuery)}&country=br&count=10&freshness=pd`;
 
     // Tenta até 3 vezes caso dê erro de "fetch failed" ou 429
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -223,7 +223,17 @@ async function fetchOlharDigitalNews(count = 1, topic = 'tecnologia') {
             }
 
             console.log(`✅ Buscadas ${data.results.length} notícias do Olhar Digital (${topic})`);
-            return data.results.slice(0, count).map(item => ({
+            
+            // Filtra as que têm imagem
+            const withImage = data.results.filter(item => item.thumbnail && item.thumbnail.src);
+            // Se não der o count, completa com as sem imagem
+            let finalResults = withImage;
+            if (finalResults.length < count) {
+                const withoutImage = data.results.filter(item => !item.thumbnail || !item.thumbnail.src);
+                finalResults = [...finalResults, ...withoutImage];
+            }
+
+            return finalResults.slice(0, count).map(item => ({
                 title: item.title,
                 link: item.url,
                 description: item.description || '',
@@ -246,7 +256,8 @@ async function fetchFromBraveSearch(query, country, count = 3) {
         return [{ title: 'Erro de Configuração API', link: '#', source: 'Sistema' }];
     }
 
-    const url = `https://api.search.brave.com/res/v1/news/search?q=${encodeURIComponent(query)}&country=${country}&count=${count}&freshness=pd`;
+    // Pede 20 resultados para garantir que acharemos o suficiente com imagens
+    const url = `https://api.search.brave.com/res/v1/news/search?q=${encodeURIComponent(query)}&country=${country}&count=20&freshness=pd`;
 
     // Tenta até 3 vezes caso dê erro de "fetch failed" ou 429
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -276,7 +287,17 @@ async function fetchFromBraveSearch(query, country, count = 3) {
             }
 
             console.log(`Buscado com sucesso: ${data.results.length} notícias para ${country}`);
-            return data.results.slice(0, count).map(item => ({
+            
+            // Filtra as que têm imagem primeiro
+            const withImage = data.results.filter(item => item.thumbnail && item.thumbnail.src);
+            // Se não tiver o suficiente, completa com as sem imagem
+            let finalResults = withImage;
+            if (finalResults.length < count) {
+                const withoutImage = data.results.filter(item => !item.thumbnail || !item.thumbnail.src);
+                finalResults = [...finalResults, ...withoutImage];
+            }
+
+            return finalResults.slice(0, count).map(item => ({
                 title: item.title,
                 link: item.url,
                 description: item.description || '',
