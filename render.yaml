@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: tech-e-development-newsletter
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TIDB_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: PORT
+        value: 3000
