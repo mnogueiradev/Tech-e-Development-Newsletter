@@ -514,10 +514,21 @@ async function loadSchedules() {
 // ========================
 // START
 // =======================
-// Backend funcionando apenas como API. 
-// O frontend em Next.js (hospedado no Render) é a única interface válida.
-app.use((req, res) => {
-    res.status(404).json({ error: 'A API está online. Acesse a interface do frontend via o link do Render ou pela porta do Next.js localmente.' });
+// Servir o Frontend construído (apenas no Render/Produção)
+const frontendPath = path.join(__dirname, 'newsletter-frontend', 'out');
+app.use(express.static(frontendPath));
+
+// Fallback SPA: Qualquer rota não reconhecida devolve o index.html do frontend (se existir)
+app.get(/.*/, (req, res, next) => {
+    if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email') || req.path.startsWith('/api')) {
+        return next();
+    }
+    
+    if (require('fs').existsSync(path.join(frontendPath, 'index.html'))) {
+        res.sendFile(path.join(frontendPath, 'index.html'));
+    } else {
+        res.status(404).json({ error: 'Frontend não encontrado. Execute "npm run build" para gerar os arquivos da interface.' });
+    }
 });
 
 app.listen(PORT, () => {
