@@ -8,7 +8,7 @@ const { Resend } = require('resend');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
-const { initNewsTable } = require('./services/newsPersistence');
+const { initializeDatabase } = require('./repositories/dbInit');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
 
 
@@ -81,7 +81,7 @@ async function initDB() {
         await loadSchedules();
 
         // Inicialização da parte de coleta de notícias (RSS)
-        await initNewsTable(pool);
+        await initializeDatabase(pool);
         initNewsScheduler(pool);
     } catch (err) {
         console.error('❌ Erro no DB:', err.message);
