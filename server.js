@@ -5,12 +5,21 @@ const cors = require('cors');
 const cron = require('node-cron');
 const path = require('path');
 const { Resend } = require('resend');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
+const { initNewsTable } = require('./services/newsPersistence');
+const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST"],
@@ -70,6 +79,10 @@ async function initDB() {
         }, 4 * 60 * 1000);
 
         await loadSchedules();
+
+        // Inicialização da parte de coleta de notícias (RSS)
+        await initNewsTable(pool);
+        initNewsScheduler(pool);
     } catch (err) {
         console.error('❌ Erro no DB:', err.message);
         process.exit(1);
@@ -101,19 +114,29 @@ async function safeExecute(query, params, retries = 3) {
 // =======================
 
 
+// Rate Limiter para a rota de subscribe
+const subscribeLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 5, // Limita a 5 requisições por IP
+    message: { error: 'Muitas requisições de inscrição. Tente novamente após 15 minutos.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 // Rota de health check para o Render detectar o serviço
 app.get('/api', (req, res) => {
     res.json({ status: 'ok', message: 'API Tech & Development Newsletter rodando!' });
 });
 
-app.post('/subscribe', async (req, res) => {
+app.post('/subscribe', subscribeLimiter, async (req, res) => {
     console.log("🧠 BODY COMPLETO:", req.body);
 
     const { email, timezone, topic } = req.body;
 
     console.log("📩 Novo subscribe:", email);
 
-    if (!email || !email.includes('@')) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
         return res.status(400).json({ error: 'Email inválido.' });
     }
 
@@ -131,8 +154,10 @@ app.post('/subscribe', async (req, res) => {
         const emailSent = await sendWelcomeNewsletter(email, userTopic);
 
         if (!emailSent) {
+            // Se falhou ao enviar o email, deletamos do banco para não ficar "preso"
+            await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
             return res.status(500).json({
-                error: "Falha ao enviar email"
+                error: "Falha ao enviar email de confirmação. O Resend pode ter bloqueado (verifique os logs ou se usou um email não autorizado no sandbox)."
             });
         }
 
@@ -151,7 +176,44 @@ app.post('/subscribe', async (req, res) => {
     }
 });
 
-app.get('/subscribers', async (req, res) => {
+// ========================
+// 🛡️ SECURITY MIDDLEWARE
+// ========================
+let ACTIVE_ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+if (!ACTIVE_ADMIN_TOKEN) {
+    ACTIVE_ADMIN_TOKEN = crypto.randomBytes(32).toString('hex');
+    console.warn("⚠️ AVISO DE SEGURANÇA: ADMIN_TOKEN não está definido. Foi gerado um token temporário aleatório.");
+    console.warn(`Token temporário: ${ACTIVE_ADMIN_TOKEN}`);
+}
+
+function verifyAdmin(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Acesso negado. Token administrativo ausente.' });
+    }
+    
+    const providedToken = authHeader.split(' ')[1];
+    
+    if (providedToken.length !== ACTIVE_ADMIN_TOKEN.length) {
+        return res.status(401).json({ error: 'Acesso negado. Token administrativo inválido.' });
+    }
+    
+    try {
+        const isValid = crypto.timingSafeEqual(
+            Buffer.from(providedToken),
+            Buffer.from(ACTIVE_ADMIN_TOKEN)
+        );
+        
+        if (!isValid) {
+            return res.status(401).json({ error: 'Acesso negado. Token administrativo inválido.' });
+        }
+        next();
+    } catch (e) {
+        return res.status(401).json({ error: 'Acesso negado. Erro de validação.' });
+    }
+}
+
+app.get('/subscribers', verifyAdmin, async (req, res) => {
     try {
         const [rows] = await pool.query(`SELECT id, email, timezone, topic, subscribed_at FROM subscribers`);
         res.status(200).json({
@@ -163,13 +225,24 @@ app.get('/subscribers', async (req, res) => {
     }
 });
 
-app.get('/trigger-email', async (req, res) => {
+app.get('/trigger-email', verifyAdmin, async (req, res) => {
     try {
         await processAndSendNewsletter();
-        res.send('Newsletter processada e enviada com sucesso! Verifique o console.');
+        res.json({ message: 'Newsletter processada e enviada com sucesso! Verifique o console.' });
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Erro ao enviar newsletter: ' + err.message);
+        console.error("Erro no /trigger-email:", err);
+        res.status(500).json({ error: 'Erro interno ao processar e enviar a newsletter.' });
+    }
+});
+
+app.get('/api/collect-news', verifyAdmin, async (req, res) => {
+    try {
+        // Dispara a coleta assíncrona, não precisamos aguardar para responder
+        runNewsCollection(pool).catch(err => console.error("Erro na coleta em background:", err));
+        res.json({ message: 'Coleta manual de notícias iniciada! Verifique os logs do console.' });
+    } catch (err) {
+        console.error("Erro no /api/collect-news:", err);
+        res.status(500).json({ error: 'Erro interno ao iniciar coleta.' });
     }
 });
 
