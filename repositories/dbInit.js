@@ -39,17 +39,24 @@ async function initializeDatabase(pool) {
                 publication_date DATETIME,
                 collection_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status VARCHAR(50) DEFAULT 'coletada', 
+                score DECIMAL(10,2) DEFAULT 0,
                 content_hash VARCHAR(255) UNIQUE,
                 metadata JSON,
                 FOREIGN KEY (source_id) REFERENCES news_sources(id) ON DELETE SET NULL
             )
         `);
 
+        // Garantir que a coluna score existe caso a tabela já tenha sido criada antes
+        try {
+            await pool.execute('ALTER TABLE news_v2 ADD COLUMN score DECIMAL(10,2) DEFAULT 0');
+        } catch (e) { /* Ignora se já existir */ }
+
         // Índices para performance (ignoramos o erro se já existirem)
         try {
             await pool.execute('CREATE INDEX idx_news_status ON news_v2(status)');
             await pool.execute('CREATE INDEX idx_news_pub_date ON news_v2(publication_date)');
             await pool.execute('CREATE INDEX idx_news_source ON news_v2(source_id)');
+            await pool.execute('CREATE INDEX idx_news_score ON news_v2(score)');
         } catch (e) { /* Índices provavelmente já existem */ }
 
         // 3. Tabela de Logs de Coleta

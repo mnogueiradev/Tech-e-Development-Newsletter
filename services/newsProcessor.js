@@ -3,11 +3,12 @@ const SourceRepository = require('../repositories/sourceRepository');
 const NewsRepository = require('../repositories/newsRepository');
 const LogRepository = require('../repositories/logRepository');
 const ValidationService = require('./validationService');
+const ScoreEngine = require('./scoring/scoreEngine');
 
 /**
  * Processa uma única notícia, sanitiza, verifica duplicação e salva
  */
-async function processAndSaveItem(newsRepo, rawItem) {
+async function processAndSaveItem(newsRepo, rawItem, recentNewsList) {
     // 1. Lógica de extração da imagem
     let main_image = null;
     if (rawItem.media && rawItem.media['$'] && rawItem.media['$'].url) {
@@ -37,9 +38,24 @@ async function processAndSaveItem(newsRepo, rawItem) {
         return { status: 'duplicate' };
     }
 
-    // 4. Persiste no banco de dados estruturado
+    // 4. Calcula o Score de Relevância
+    const scoreResult = ScoreEngine.calculateScore(cleanNews, recentNewsList);
+    cleanNews.score = scoreResult.finalScore;
+    cleanNews.metadata.score_details = scoreResult;
+
+    console.log(ScoreEngine.formatExplanationLog(cleanNews.title, scoreResult));
+
+    // 5. Persiste no banco de dados estruturado
     await newsRepo.create(cleanNews);
-    console.log(`[PROCESSOR] ✅ Salva [status: ${cleanNews.status}]: ${cleanNews.title}`);
+    
+    // Adiciona na lista recente em memória para ajudar a detectar tendências nas próximas da fila
+    recentNewsList.push({
+        id: -1, // ID temporário
+        title: cleanNews.title,
+        original_link: cleanNews.original_link
+    });
+
+    console.log(`[PROCESSOR] ✅ Salva [score: ${cleanNews.score}]: ${cleanNews.title}`);
     return { status: 'saved' };
 }
 
@@ -58,6 +74,9 @@ async function runNewsCollection(pool) {
 
     const sources = await sourceRepo.getActiveSources();
     console.log(`[COLETA] Encontradas ${sources.length} fontes ativas no Banco de Dados.`);
+
+    // Busca notícias das últimas 24h para usar no cálculo de tendências (Repetição)
+    const recentNewsList = await newsRepo.getRecentNewsForComparison();
 
     for (const source of sources) {
         const startTime = new Date();
@@ -91,7 +110,7 @@ async function runNewsCollection(pool) {
                     item.publication_date = item.isoDate || item.pubDate;
                     item.author = item.creator || item.author;
 
-                    const result = await processAndSaveItem(newsRepo, item);
+                    const result = await processAndSaveItem(newsRepo, item, recentNewsList);
                     
                     if (result.status === 'saved') logData.news_saved++;
                     else if (result.status === 'duplicate') logData.duplicates++;

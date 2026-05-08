@@ -22,8 +22,8 @@ class NewsRepository {
                 `INSERT INTO news_v2 (
                     source_id, title, slug, description, full_content, original_link,
                     category, tags, main_image, author, language, publication_date,
-                    status, content_hash, metadata
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    status, score, content_hash, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     newsData.source_id,
                     newsData.title,
@@ -38,6 +38,7 @@ class NewsRepository {
                     newsData.language || 'pt-BR',
                     newsData.publication_date ? new Date(newsData.publication_date) : new Date(),
                     newsData.status || 'coletada',
+                    newsData.score || 0,
                     newsData.content_hash || null,
                     newsData.metadata ? JSON.stringify(newsData.metadata) : null
                 ]
@@ -45,6 +46,43 @@ class NewsRepository {
             return true;
         } catch (error) {
             console.error(`[NewsRepo] Erro ao inserir notícia (${newsData.title}):`, error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Busca notícias das últimas 24h para usar no cálculo de relevância / tendências
+     */
+    async getRecentNewsForComparison() {
+        try {
+            const [rows] = await this.pool.execute(
+                `SELECT id, title, original_link FROM news_v2 
+                 WHERE publication_date >= NOW() - INTERVAL 24 HOUR`
+            );
+            return rows;
+        } catch (error) {
+            console.error('[NewsRepo] Erro ao buscar notícias recentes:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Retorna o ranking das notícias mais relevantes do dia, ordenadas pelo score
+     * @param {number} limit Quantidade de notícias a retornar
+     */
+    async getTopNews(limit = 10) {
+        try {
+            const [rows] = await this.pool.execute(
+                `SELECT id, title, source_name, original_link, score, publication_date 
+                 FROM news_v2 
+                 WHERE publication_date >= NOW() - INTERVAL 24 HOUR 
+                 ORDER BY score DESC, publication_date DESC 
+                 LIMIT ?`,
+                [limit]
+            );
+            return rows;
+        } catch (error) {
+            console.error('[NewsRepo] Erro ao buscar Top News:', error);
             throw error;
         }
     }
