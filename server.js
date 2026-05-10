@@ -308,6 +308,18 @@ app.get('/api/run-selection', verifyAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/admin/dashboard', verifyAdmin, async (req, res) => {
+    try {
+        const DashboardService = require('./services/admin/dashboardService');
+        const dashboard = new DashboardService(pool);
+        const data = await dashboard.getDashboardData();
+        res.json(data);
+    } catch (err) {
+        console.error("Erro no /api/admin/dashboard:", err);
+        res.status(500).json({ error: 'Erro interno ao carregar dados do dashboard.' });
+    }
+});
+
 // ========================
 // NEWS FETCHING LOGIC
 // ========================
