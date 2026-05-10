@@ -4,6 +4,7 @@ const NewsRepository = require('../repositories/newsRepository');
 const LogRepository = require('../repositories/logRepository');
 const ValidationService = require('./validationService');
 const ScoreEngine = require('./scoring/scoreEngine');
+const ImageExtractor = require('./imageExtractor');
 
 /**
  * Processa uma única notícia, sanitiza, verifica duplicação e salva
@@ -22,7 +23,10 @@ async function processAndSaveItem(newsRepo, rawItem, recentNewsList) {
             main_image = imgMatch[1];
         }
     }
-    rawItem.main_image = main_image;
+    
+    // Obtém a melhor thumbnail garantida (valida a original ou extrai og:image da página)
+    const bestImage = await ImageExtractor.getBestThumbnail(main_image, rawItem.link || rawItem.original_link);
+    rawItem.main_image = bestImage;
 
     // 2. Sanitiza os dados estruturando para o BD (V2)
     const cleanNews = ValidationService.sanitizeNews(rawItem);

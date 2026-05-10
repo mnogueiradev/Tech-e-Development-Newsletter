@@ -413,7 +413,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
         <div style="margin-bottom: 30px; padding: 20px;">
             <table width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                    ${item.image ? '<td width="120" valign="top" style="padding-right: 15px;"><img src="' + item.image + '" alt="Imagem da notícia" style="width: 120px; height: 80px; object-fit: cover; border-radius: 8px;"></td>' : ''}
+                    ${item.image ? '<td width="120" valign="top" style="padding-right: 15px;"><img src="' + item.image + '" alt="Imagem da notícia" style="width: 120px; height: 80px; object-fit: cover; border-radius: 8px;" onerror="this.onerror=null; this.src=\'https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png\';"></td>' : ''}
                     <td valign="top">
                         <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #000000; line-height: 1.3;">${escapeHtml(item.title)}</h3>
                         ${item.description ? '<p style="margin: 0 0 15px 0; font-size: 14px; color: #000000; line-height: 1.6;">' + escapeHtml(item.description) + '</p>' : ''}
