@@ -651,7 +651,7 @@ async function loadSchedules() {
 // =======================
 // Servir o Frontend construído (apenas no Render/Produção)
 const frontendPath = path.join(__dirname, 'newsletter-frontend', 'out');
-app.use(express.static(frontendPath));
+app.use(express.static(frontendPath, { extensions: ['html'] }));
 
 // Fallback SPA: Qualquer rota não reconhecida devolve o index.html do frontend (se existir)
 app.get(/.*/, (req, res, next) => {
