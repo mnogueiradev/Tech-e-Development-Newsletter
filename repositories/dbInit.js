@@ -76,7 +76,21 @@ async function initializeDatabase(pool) {
             )
         `);
 
-        // 4. Migração das fontes Hardcoded para o Banco (Se a tabela estiver vazia)
+        // 4. Tabela de Seleções da Newsletter (Edições)
+        await pool.execute(`
+            CREATE TABLE IF NOT EXISTS edition_selections (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                news_id INT,
+                edition_date DATE,
+                position INT,
+                reason TEXT,
+                algorithm_version VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (news_id) REFERENCES news_v2(id) ON DELETE CASCADE
+            )
+        `);
+
+        // 5. Migração das fontes Hardcoded para o Banco (Se a tabela estiver vazia)
         const [sources] = await pool.execute('SELECT COUNT(*) as count FROM news_sources');
         if (sources[0].count === 0) {
             console.log('[DB INIT] Populando fontes de notícias padrão...');

@@ -246,6 +246,21 @@ app.get('/api/collect-news', verifyAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/run-selection', verifyAdmin, async (req, res) => {
+    try {
+        const SelectionEngine = require('./services/selection/selectionEngine');
+        const engine = new SelectionEngine(pool);
+        const selections = await engine.runDailySelection();
+        res.json({ 
+            message: 'Seleção rodada com sucesso! Verifique os logs no console.',
+            selectedCount: selections.length
+        });
+    } catch (err) {
+        console.error("Erro no /api/run-selection:", err);
+        res.status(500).json({ error: 'Erro interno ao rodar algoritmo de seleção.' });
+    }
+});
+
 // ========================
 // NEWS FETCHING LOGIC
 // ========================
