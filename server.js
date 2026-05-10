@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const { initializeDatabase } = require('./repositories/dbInit');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
+const jwt = require('jsonwebtoken');
 
 
 const app = express();
@@ -186,6 +187,8 @@ if (!ACTIVE_ADMIN_TOKEN) {
     console.warn(`Token temporário: ${ACTIVE_ADMIN_TOKEN}`);
 }
 
+const JWT_SECRET = process.env.JWT_SECRET || ACTIVE_ADMIN_TOKEN;
+
 function verifyAdmin(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -194,24 +197,68 @@ function verifyAdmin(req, res, next) {
     
     const providedToken = authHeader.split(' ')[1];
     
-    if (providedToken.length !== ACTIVE_ADMIN_TOKEN.length) {
-        return res.status(401).json({ error: 'Acesso negado. Token administrativo inválido.' });
-    }
-    
     try {
-        const isValid = crypto.timingSafeEqual(
-            Buffer.from(providedToken),
-            Buffer.from(ACTIVE_ADMIN_TOKEN)
-        );
-        
-        if (!isValid) {
-            return res.status(401).json({ error: 'Acesso negado. Token administrativo inválido.' });
+        // Tenta validar como JWT primeiro (usado pelo painel web /admin)
+        const decoded = jwt.verify(providedToken, JWT_SECRET);
+        req.admin = decoded; // Se passou, é um token JWT válido
+        return next();
+    } catch (jwtErr) {
+        // Se falhar no JWT, cai pro fallback (verifica se é o token estático do cron/scripts manuais)
+        try {
+            // Buffer precisa ter o mesmo tamanho para timingSafeEqual
+            if (providedToken.length !== ACTIVE_ADMIN_TOKEN.length) {
+                return res.status(401).json({ error: 'Acesso negado. Token inválido.' });
+            }
+            
+            const isValid = crypto.timingSafeEqual(
+                Buffer.from(providedToken),
+                Buffer.from(ACTIVE_ADMIN_TOKEN)
+            );
+            
+            if (!isValid) {
+                return res.status(401).json({ error: 'Acesso negado. Token administrativo inválido.' });
+            }
+            return next();
+        } catch (e) {
+            return res.status(401).json({ error: 'Acesso negado. Erro de validação.' });
         }
-        next();
-    } catch (e) {
-        return res.status(401).json({ error: 'Acesso negado. Erro de validação.' });
     }
 }
+
+// ========================
+// 🔑 AUTHENTICATION ROUTES
+// ========================
+
+app.post('/api/auth/login', (req, res) => {
+    const { email, password } = req.body;
+    
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@admin.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
+    }
+
+    if (email === adminEmail && password === adminPassword) {
+        console.log(`[AUTH] ✅ Login realizado com sucesso para: ${email}`);
+        
+        // Gera o token JWT válido por 24 horas
+        const token = jwt.sign({ role: 'admin', email }, JWT_SECRET, { expiresIn: '24h' });
+        
+        return res.json({
+            success: true,
+            token,
+            message: 'Autenticado com sucesso'
+        });
+    } else {
+        console.warn(`[AUTH] ❌ Tentativa de login falha para: ${email}`);
+        return res.status(401).json({ error: 'Credenciais inválidas.' });
+    }
+});
+
+app.get('/api/auth/verify', verifyAdmin, (req, res) => {
+    res.json({ success: true, message: 'Sessão válida' });
+});
 
 app.get('/subscribers', verifyAdmin, async (req, res) => {
     try {
