@@ -39,6 +39,9 @@ class CMSService {
         const sortField = validSortFields[sortBy] || 'n.collection_date';
         const sortDir = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
+        const parsedLimit = parseInt(limit, 10) || 20;
+        const parsedOffset = parseInt(offset, 10) || 0;
+
         const query = `
             SELECT 
                 n.id, n.title, n.slug, n.description, n.original_link, 
@@ -49,7 +52,7 @@ class CMSService {
             LEFT JOIN news_sources s ON n.source_id = s.id
             ${whereSQL}
             ORDER BY ${sortField} ${sortDir}
-            LIMIT ? OFFSET ?
+            LIMIT ${parsedLimit} OFFSET ${parsedOffset}
         `;
         
         const countQuery = `
@@ -64,15 +67,14 @@ class CMSService {
             const total = countRows[0].total;
 
             // Busca os dados
-            const queryParams = [...params, parseInt(limit), parseInt(offset)];
-            const [rows] = await this.pool.execute(query, queryParams);
+            const [rows] = await this.pool.execute(query, params);
 
             return {
                 data: rows,
                 pagination: {
                     total,
-                    page: parseInt(page),
-                    limit: parseInt(limit),
+                    page: parseInt(page, 10) || 1,
+                    limit: parsedLimit,
                     totalPages: Math.ceil(total / limit)
                 }
             };
