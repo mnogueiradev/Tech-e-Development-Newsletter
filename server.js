@@ -665,6 +665,12 @@ async function loadSchedules() {
 const frontendPath = path.join(__dirname, 'newsletter-frontend', 'out');
 app.use(express.static(frontendPath, { extensions: ['html'] }));
 
+// Rotas explícitas para garantir que pastas/subpastas com barra final não caiam no fallback SPA errado
+app.get('/admin', (req, res) => res.sendFile(path.join(frontendPath, 'admin.html')));
+app.get('/admin/', (req, res) => res.sendFile(path.join(frontendPath, 'admin.html')));
+app.get('/admin/login', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'login.html')));
+app.get('/admin/login/', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'login.html')));
+
 // Fallback SPA: Qualquer rota não reconhecida devolve o index.html do frontend (se existir)
 app.get(/.*/, (req, res, next) => {
     if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email') || req.path.startsWith('/api')) {

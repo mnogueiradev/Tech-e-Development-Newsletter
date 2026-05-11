@@ -13,6 +13,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://tech-e-development-n
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [isAuth, setIsAuth] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -39,9 +40,12 @@ export default function AdminDashboard() {
       } else if (res.status === 401) {
         localStorage.removeItem("admin_token");
         router.push("/admin/login");
+      } else {
+        setErrorMsg("Erro 500: O servidor não conseguiu gerar os dados do dashboard.");
       }
     } catch (err) {
       console.error("Erro ao buscar dados do dashboard", err);
+      setErrorMsg("Falha na conexão com o servidor.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -67,6 +71,15 @@ export default function AdminDashboard() {
           <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-gray-400 font-medium">Carregando painel...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (errorMsg) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] flex-col gap-4">
+        <p className="text-red-400 font-medium">{errorMsg}</p>
+        <button onClick={handleLogout} className="px-4 py-2 bg-red-500/10 text-red-400 rounded-lg">Sair</button>
       </div>
     );
   }

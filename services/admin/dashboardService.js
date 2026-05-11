@@ -30,13 +30,13 @@ class DashboardService {
             const totalSubscribers = subsRows[0].count;
 
             const [newsTodayRows] = await this.pool.execute(
-                'SELECT COUNT(*) as count FROM news_v2 WHERE created_at >= ?',
+                'SELECT COUNT(*) as count FROM news_v2 WHERE collection_date >= ?',
                 [startOfTodayStr]
             );
             const newsToday = newsTodayRows[0].count;
 
             const [newsYesterdayRows] = await this.pool.execute(
-                'SELECT COUNT(*) as count FROM news_v2 WHERE created_at >= ? AND created_at < ?',
+                'SELECT COUNT(*) as count FROM news_v2 WHERE collection_date >= ? AND collection_date < ?',
                 [startOfYesterdayStr, startOfTodayStr]
             );
             const newsYesterday = newsYesterdayRows[0].count;
@@ -50,18 +50,24 @@ class DashboardService {
                 selectedNews = selRows[0].count;
             } catch (e) {}
 
-            const [sourcesRows] = await this.pool.execute('SELECT COUNT(DISTINCT source) as count FROM news_v2');
+            const [sourcesRows] = await this.pool.execute('SELECT COUNT(DISTINCT source_id) as count FROM news_v2');
             const totalSources = sourcesRows[0].count;
 
             // 3. Top News (Hoje)
             let topNews = [];
             try {
                 const [topRows] = await this.pool.execute(
-                    'SELECT id, title, source, score, created_at FROM news_v2 WHERE created_at >= ? ORDER BY score DESC LIMIT 5',
+                    `SELECT n.id, n.title, s.name as source, n.score, n.collection_date as created_at 
+                     FROM news_v2 n 
+                     LEFT JOIN news_sources s ON n.source_id = s.id 
+                     WHERE n.collection_date >= ? 
+                     ORDER BY n.score DESC LIMIT 5`,
                     [startOfTodayStr]
                 );
                 topNews = topRows;
-            } catch (e) {}
+            } catch (e) {
+                console.error("Top News Error:", e);
+            }
 
             // 4. Atividade Recente (Mocked logic built from real tables)
             let recentActivity = [];
@@ -69,15 +75,20 @@ class DashboardService {
             // Pega as 3 últimas notícias inseridas
             try {
                 const [recentNewsRows] = await this.pool.execute(
-                    'SELECT title, source, created_at FROM news_v2 ORDER BY created_at DESC LIMIT 3'
+                    `SELECT n.title, s.name as source, n.collection_date 
+                     FROM news_v2 n 
+                     LEFT JOIN news_sources s ON n.source_id = s.id 
+                     ORDER BY n.collection_date DESC LIMIT 3`
                 );
                 recentActivity.push(...recentNewsRows.map(n => ({
                     id: Math.random().toString(),
                     type: 'news_added',
-                    message: `Notícia coletada de ${n.source}: ${n.title.substring(0, 30)}...`,
-                    time: n.created_at
+                    message: `Notícia coletada de ${n.source || 'Desconhecida'}: ${n.title.substring(0, 30)}...`,
+                    time: n.collection_date
                 })));
-            } catch (e) {}
+            } catch (e) {
+                console.error("Recent News Error:", e);
+            }
 
             // Pega as 2 últimas inscrições
             try {
