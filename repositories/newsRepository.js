@@ -73,10 +73,11 @@ class NewsRepository {
     async getTopNews(limit = 10) {
         try {
             const [rows] = await this.pool.execute(
-                `SELECT id, title, source_name, original_link, score, publication_date 
-                 FROM news_v2 
-                 WHERE publication_date >= NOW() - INTERVAL 24 HOUR 
-                 ORDER BY score DESC, publication_date DESC 
+                `SELECT n.id, n.title, s.name as source_name, n.original_link, n.score, n.publication_date 
+                 FROM news_v2 n
+                 LEFT JOIN news_sources s ON n.source_id = s.id
+                 WHERE n.publication_date >= NOW() - INTERVAL 24 HOUR 
+                 ORDER BY n.score DESC, n.publication_date DESC 
                  LIMIT ?`,
                 [limit]
             );
