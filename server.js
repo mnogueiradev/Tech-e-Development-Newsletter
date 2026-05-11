@@ -321,6 +321,75 @@ app.get('/api/admin/dashboard', verifyAdmin, async (req, res) => {
 });
 
 // ========================
+// ADMIN CMS LOGIC
+// ========================
+
+app.get('/api/admin/news/filters', verifyAdmin, async (req, res) => {
+    try {
+        const CMSService = require('./services/admin/cmsService');
+        const cms = new CMSService(pool);
+        const data = await cms.getFilterOptions();
+        res.json(data);
+    } catch (err) {
+        console.error("Erro no /api/admin/news/filters:", err);
+        res.status(500).json({ error: 'Erro ao buscar filtros.' });
+    }
+});
+
+app.get('/api/admin/news', verifyAdmin, async (req, res) => {
+    try {
+        const CMSService = require('./services/admin/cmsService');
+        const cms = new CMSService(pool);
+        const data = await cms.getNewsList(req.query);
+        res.json(data);
+    } catch (err) {
+        console.error("Erro no /api/admin/news:", err);
+        res.status(500).json({ error: 'Erro ao carregar notícias.' });
+    }
+});
+
+app.get('/api/admin/news/:id', verifyAdmin, async (req, res) => {
+    try {
+        const CMSService = require('./services/admin/cmsService');
+        const cms = new CMSService(pool);
+        const data = await cms.getNewsDetails(req.params.id);
+        if (!data) return res.status(404).json({ error: 'Notícia não encontrada.' });
+        res.json(data);
+    } catch (err) {
+        console.error("Erro no /api/admin/news/:id:", err);
+        res.status(500).json({ error: 'Erro ao buscar detalhes da notícia.' });
+    }
+});
+
+app.patch('/api/admin/news/:id/status', verifyAdmin, async (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!status) return res.status(400).json({ error: 'Status obrigatório.' });
+        
+        const CMSService = require('./services/admin/cmsService');
+        const cms = new CMSService(pool);
+        await cms.updateNewsStatus(req.params.id, status);
+        res.json({ message: 'Status atualizado com sucesso.' });
+    } catch (err) {
+        console.error("Erro no /api/admin/news/:id/status:", err);
+        res.status(500).json({ error: 'Erro ao atualizar status.' });
+    }
+});
+
+app.patch('/api/admin/news/:id/notes', verifyAdmin, async (req, res) => {
+    try {
+        const { editorial_summary, internal_note } = req.body;
+        const CMSService = require('./services/admin/cmsService');
+        const cms = new CMSService(pool);
+        await cms.updateEditorialNotes(req.params.id, { editorial_summary, internal_note });
+        res.json({ message: 'Notas editoriais atualizadas com sucesso.' });
+    } catch (err) {
+        console.error("Erro no /api/admin/news/:id/notes:", err);
+        res.status(500).json({ error: 'Erro ao atualizar notas editoriais.' });
+    }
+});
+
+// ========================
 // NEWS FETCHING LOGIC
 // ========================
 
@@ -670,6 +739,8 @@ app.get('/admin', (req, res) => res.sendFile(path.join(frontendPath, 'admin.html
 app.get('/admin/', (req, res) => res.sendFile(path.join(frontendPath, 'admin.html')));
 app.get('/admin/login', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'login.html')));
 app.get('/admin/login/', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'login.html')));
+app.get('/admin/news', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'news.html')));
+app.get('/admin/news/', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'news.html')));
 
 // Fallback SPA: Qualquer rota não reconhecida devolve o index.html do frontend (se existir)
 app.get(/.*/, (req, res, next) => {

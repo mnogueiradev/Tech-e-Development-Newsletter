@@ -103,6 +103,14 @@ export default function AdminDashboard() {
           
           <div className="flex items-center gap-3">
             <button
+              onClick={() => router.push('/admin/news')}
+              className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 rounded-lg border border-purple-500/20 transition-all font-medium text-sm"
+              title="Acessar CMS Editorial"
+            >
+              <Newspaper size={16} />
+              <span className="hidden md:inline">CMS Editorial</span>
+            </button>
+            <button
               onClick={() => fetchDashboardData(true)}
               disabled={refreshing}
               className="p-2.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg border border-white/10 transition-all disabled:opacity-50"
