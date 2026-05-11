@@ -394,15 +394,21 @@ app.patch('/api/admin/news/:id/notes', verifyAdmin, async (req, res) => {
 // ========================
 
 app.get('/api/admin/selection/generate', verifyAdmin, async (req, res) => {
+    console.log("[API] /api/admin/selection/generate chamada.");
     try {
         const SelectionEngine = require('./services/selection/selectionEngine');
         const engine = new SelectionEngine(pool);
         // Gera seleção sem salvar (dryRun = true)
         const suggestions = await engine.runDailySelection(true);
-        res.json({ suggestions });
+        console.log(`[API] Seleção gerada com sucesso. Sugestões: ${suggestions ? suggestions.length : 0}`);
+        res.json({ suggestions: suggestions || [] });
     } catch (err) {
-        console.error("Erro ao gerar seleção:", err);
-        res.status(500).json({ error: 'Erro ao gerar seleção editorial.' });
+        console.error("Erro CRÍTICO ao gerar seleção:", err);
+        res.status(500).json({ 
+            error: 'Erro ao gerar seleção editorial.',
+            details: err.message,
+            stack: err.stack 
+        });
     }
 });
 

@@ -72,18 +72,27 @@ class NewsRepository {
      */
     async getTopNews(limit = 10) {
         try {
+            console.log(`[NewsRepo] Buscando Top News. Limite: ${limit}`);
+            const limitNum = Number(limit);
+            if (isNaN(limitNum) || limitNum <= 0) {
+                console.warn(`[NewsRepo] Limite inválido: ${limit}. Usando padrão 10.`);
+                limit = 10;
+            }
             const [rows] = await this.pool.execute(
-                `SELECT n.id, n.title, s.name as source_name, n.original_link, n.score, n.publication_date 
+                `SELECT n.id, n.title, s.name as source_name, n.original_link, n.score, n.publication_date, n.status, n.tags, n.category 
                  FROM news_v2 n
                  LEFT JOIN news_sources s ON n.source_id = s.id
-                 WHERE n.publication_date >= NOW() - INTERVAL 24 HOUR 
+                 WHERE n.publication_date >= NOW() - INTERVAL 48 HOUR 
+                 AND n.status != 'rejeitada'
                  ORDER BY n.score DESC, n.publication_date DESC 
                  LIMIT ?`,
-                [limit]
+                [limitNum]
             );
+            console.log(`[NewsRepo] Top News encontradas: ${rows.length}`);
             return rows;
         } catch (error) {
             console.error('[NewsRepo] Erro ao buscar Top News:', error);
+            console.error(error.stack);
             throw error;
         }
     }
