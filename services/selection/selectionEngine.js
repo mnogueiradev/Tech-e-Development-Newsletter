@@ -13,7 +13,7 @@ class SelectionEngine {
     /**
      * Roda o algoritmo de curadoria para montar a newsletter do dia
      */
-    async runDailySelection() {
+    async runDailySelection(dryRun = false) {
         console.log(`\n[SELECTION_ENGINE] 🎩 Iniciando seleção editorial para a newsletter de hoje.`);
         
         // 1. Busca um pacote generoso de Top News (ex: as 30 melhores)
@@ -56,9 +56,13 @@ class SelectionEngine {
         console.log(`=======================================================\n`);
 
         if (finalSelection.length > 0) {
-            // 4. Salva a seleção no banco
-            await this.selectionRepo.saveSelections(finalSelection, config.version);
-            console.log(`[SELECTION_ENGINE] 🏆 Seleção concluída: ${finalSelection.length} notícias escolhidas.`);
+            // 4. Salva a seleção no banco apenas se não for dryRun
+            if (!dryRun) {
+                await this.selectionRepo.saveSelections(finalSelection, config.version);
+                console.log(`[SELECTION_ENGINE] 🏆 Seleção salva no banco: ${finalSelection.length} notícias escolhidas.`);
+            } else {
+                console.log(`[SELECTION_ENGINE] 🧪 Dry-run concluído: ${finalSelection.length} notícias recomendadas.`);
+            }
         } else {
             console.warn(`[SELECTION_ENGINE] ⚠️ Nenhuma notícia atendeu aos critérios editoriais hoje.`);
         }

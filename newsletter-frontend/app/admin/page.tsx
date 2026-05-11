@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Newspaper, CheckCircle, DatabaseZap, Activity, LogOut, RefreshCw } from "lucide-react";
+import { Users, Newspaper, CheckCircle, DatabaseZap, Activity, LogOut, RefreshCw, Wand2 } from "lucide-react";
 
 import { StatCard } from "../../components/admin/DashboardCards";
 import { RecentActivity } from "../../components/admin/RecentActivity";
@@ -101,7 +101,15 @@ export default function AdminDashboard() {
             </p>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 mt-4 md:mt-0">
+            <button
+              onClick={() => router.push('/admin/selection')}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg border border-blue-500/20 transition-all font-medium text-sm"
+              title="Montar Edição Diária"
+            >
+              <Wand2 size={16} />
+              <span className="hidden md:inline">Montar Edição</span>
+            </button>
             <button
               onClick={() => router.push('/admin/news')}
               className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 rounded-lg border border-purple-500/20 transition-all font-medium text-sm"

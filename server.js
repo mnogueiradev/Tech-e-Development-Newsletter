@@ -390,6 +390,47 @@ app.patch('/api/admin/news/:id/notes', verifyAdmin, async (req, res) => {
 });
 
 // ========================
+// ADMIN SELECTION ENGINE
+// ========================
+
+app.get('/api/admin/selection/generate', verifyAdmin, async (req, res) => {
+    try {
+        const SelectionEngine = require('./services/selection/selectionEngine');
+        const engine = new SelectionEngine(pool);
+        // Gera seleção sem salvar (dryRun = true)
+        const suggestions = await engine.runDailySelection(true);
+        res.json({ suggestions });
+    } catch (err) {
+        console.error("Erro ao gerar seleção:", err);
+        res.status(500).json({ error: 'Erro ao gerar seleção editorial.' });
+    }
+});
+
+app.post('/api/admin/selection/save', verifyAdmin, async (req, res) => {
+    try {
+        const { selection } = req.body;
+        if (!selection || !Array.isArray(selection) || selection.length === 0) {
+            return res.status(400).json({ error: 'Seleção inválida.' });
+        }
+        
+        const SelectionRepository = require('./repositories/selectionRepository');
+        const selectionRepo = new SelectionRepository(pool);
+        
+        // Remove a seleção atual do dia (se existir) para sobrescrever com a nova ordem manual
+        const today = new Date().toISOString().split('T')[0];
+        await pool.execute('DELETE FROM edition_selections WHERE edition_date = ?', [today]);
+        
+        // Salva a nova seleção configurada manualmente pelo usuário
+        await selectionRepo.saveSelections(selection, 'manual_override_v1');
+        
+        res.json({ message: 'Edição salva com sucesso.' });
+    } catch (err) {
+        console.error("Erro ao salvar seleção:", err);
+        res.status(500).json({ error: 'Erro ao salvar edição.' });
+    }
+});
+
+// ========================
 // NEWS FETCHING LOGIC
 // ========================
 
@@ -741,6 +782,8 @@ app.get('/admin/login', (req, res) => res.sendFile(path.join(frontendPath, 'admi
 app.get('/admin/login/', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'login.html')));
 app.get('/admin/news', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'news.html')));
 app.get('/admin/news/', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'news.html')));
+app.get('/admin/selection', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'selection.html')));
+app.get('/admin/selection/', (req, res) => res.sendFile(path.join(frontendPath, 'admin', 'selection.html')));
 
 // Fallback SPA: Qualquer rota não reconhecida devolve o index.html do frontend (se existir)
 app.get(/.*/, (req, res, next) => {
