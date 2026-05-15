@@ -95,6 +95,20 @@ export default function AdminNewsCMS() {
     }
   };
 
+  const handleCollectNews = async () => {
+    try {
+      const token = localStorage.getItem("admin_token");
+      alert("A coleta de notícias foi iniciada em segundo plano. Este processo pode levar alguns minutos. Recarregue a página em breve para ver as novas notícias.");
+      await fetch(`${API_URL}/api/admin/news/collect`, {
+        method: 'POST',
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao iniciar a coleta.");
+    }
+  };
+
   if (!isAuth && loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
@@ -119,12 +133,20 @@ export default function AdminNewsCMS() {
             <p className="text-gray-400 text-sm">{pagination.total} notícias cadastradas</p>
           </div>
           
-          <button 
-            onClick={() => fetchNews()} 
-            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-lg border border-white/10 transition-all text-sm"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Atualizar
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleCollectNews} 
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg border border-purple-500 transition-all text-sm font-medium shadow-lg shadow-purple-500/20"
+            >
+              Forçar Coleta
+            </button>
+            <button 
+              onClick={() => fetchNews()} 
+              className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-lg border border-white/10 transition-all text-sm"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Atualizar
+            </button>
+          </div>
         </div>
 
         {/* Filters */}

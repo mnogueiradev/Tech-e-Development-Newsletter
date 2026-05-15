@@ -324,6 +324,20 @@ app.get('/api/admin/dashboard', verifyAdmin, async (req, res) => {
 // ADMIN CMS LOGIC
 // ========================
 
+app.post('/api/admin/news/collect', verifyAdmin, async (req, res) => {
+    try {
+        console.log("[API] Coleta manual de notícias acionada.");
+        // Roda a coleta de forma assíncrona para não prender a requisição muito tempo
+        runNewsCollection(pool).catch(err => {
+            console.error("[API] Erro na coleta assíncrona:", err);
+        });
+        res.json({ message: 'Coleta de notícias iniciada em segundo plano. Os resultados aparecerão em alguns minutos.' });
+    } catch (err) {
+        console.error("Erro no /api/admin/news/collect:", err);
+        res.status(500).json({ error: 'Erro ao iniciar a coleta.' });
+    }
+});
+
 app.get('/api/admin/news/filters', verifyAdmin, async (req, res) => {
     try {
         const CMSService = require('./services/admin/cmsService');
