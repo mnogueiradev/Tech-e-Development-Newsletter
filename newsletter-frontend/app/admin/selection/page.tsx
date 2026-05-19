@@ -35,45 +35,120 @@ export default function AdminSelection() {
     setLoading(true);
     try {
       const token = localStorage.getItem("admin_token");
+      if (!token) {
+        alert("Token não encontrado. Por favor, faça login novamente.");
+        router.push("/admin/login");
+        return;
+      }
+
       const res = await fetch(`${API_URL}/api/admin/selection/generate`, {
+        method: "GET",
         headers: { "Authorization": `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        // Garantimos que cada item tem um ID string para o dnd-kit
-        setSelection(data.suggestions.map((item: any) => ({ ...item, dndId: String(item.id) })));
-      } else {
-        alert("Erro ao gerar seleção.");
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        const errorMsg = errorData.message || errorData.details || errorData.error;
+        alert(`Erro ao gerar seleção: ${errorMsg}`);
+        console.error("Erro na resposta:", errorData);
+        return;
       }
+
+      const data = await res.json();
+      
+      // Validar se suggestions existe e é um array
+      if (!data.suggestions || !Array.isArray(data.suggestions)) {
+        alert("Erro: Resposta inválida do servidor. Verifique o console.");
+        console.error("Dados inválidos recebidos:", data);
+        return;
+      }
+
+      if (data.suggestions.length === 0) {
+        alert("Nenhuma notícia disponível para sugerir. Clique em 'Coletar Notícias' primeiro.");
+        return;
+      }
+
+      // Garantir que cada item tem um ID string para o dnd-kit
+      const validatedSelection = data.suggestions.map((item: any) => {
+        if (!item.id) {
+          console.warn("Item sem ID detectado:", item);
+          return null;
+        }
+        return { 
+          ...item, 
+          dndId: String(item.id),
+          score: item.score || 0,
+          source_name: item.source_name || 'Fonte Desconhecida',
+          selectionReason: item.selectionReason || 'Sugerida pelo algoritmo'
+        };
+      }).filter(Boolean); // Remove null entries
+
+      if (validatedSelection.length === 0) {
+        alert("Nenhuma notícia válida foi retornada.");
+        return;
+      }
+
+      setSelection(validatedSelection);
+      console.log(`✅ ${validatedSelection.length} notícias carregadas com sucesso`);
     } catch (err) {
-      console.error(err);
-      alert("Falha na conexão.");
+      console.error("Erro ao gerar seleção:", err);
+      alert("Falha na conexão ao gerar seleção. Verifique sua conexão e tente novamente.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleSave = async () => {
-    if (selection.length === 0) return alert("A seleção está vazia!");
+    if (selection.length === 0) {
+      alert("A seleção está vazia! Clique em 'Sugerir Edição' primeiro.");
+      return;
+    }
+
     setSaving(true);
     try {
       const token = localStorage.getItem("admin_token");
+      if (!token) {
+        alert("Token não encontrado. Por favor, faça login novamente.");
+        router.push("/admin/login");
+        return;
+      }
+
+      // Preparar dados para envio, removendo o dndId (é apenas para o componente)
+      const dataToSend = selection.map(item => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        source_name: item.source_name,
+        original_link: item.original_link,
+        score: item.score,
+        category: item.category,
+        selectionReason: item.selectionReason,
+        main_image: item.main_image,
+        publication_date: item.publication_date
+      }));
+
       const res = await fetch(`${API_URL}/api/admin/selection/save`, {
         method: "POST",
         headers: { 
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ selection })
+        body: JSON.stringify({ selection: dataToSend })
       });
-      if (res.ok) {
-        alert("Edição salva com sucesso!");
-      } else {
-        alert("Erro ao salvar.");
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        alert(`Erro ao salvar: ${errorData.error || errorData.details || "Erro desconhecido"}`);
+        console.error("Erro na resposta:", errorData);
+        return;
       }
+
+      const data = await res.json();
+      alert(`✅ ${data.count || selection.length} notícias salvas com sucesso!`);
+      console.log("Edição salva com sucesso:", data);
     } catch (err) {
-      console.error(err);
-      alert("Falha ao salvar.");
+      console.error("Erro ao salvar seleção:", err);
+      alert("Falha ao salvar a edição. Verifique sua conexão e tente novamente.");
     } finally {
       setSaving(false);
     }

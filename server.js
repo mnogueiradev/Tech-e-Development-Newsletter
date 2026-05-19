@@ -415,13 +415,31 @@ app.get('/api/admin/selection/generate', verifyAdmin, async (req, res) => {
         // Gera seleção sem salvar (dryRun = true)
         const suggestions = await engine.runDailySelection(true);
         console.log(`[API] Seleção gerada com sucesso. Sugestões: ${suggestions ? suggestions.length : 0}`);
-        res.json({ suggestions: suggestions || [] });
+        
+        // Validar que cada sugestão tem os campos necessários
+        const validSuggestions = (suggestions || []).map(item => ({
+            id: item.id,
+            title: item.title || 'Título não disponível',
+            description: item.description || '',
+            source_name: item.source_name || 'Fonte Desconhecida',
+            original_link: item.original_link || '#',
+            score: item.score || 0,
+            main_image: item.main_image || null,
+            category: item.category || 'geral',
+            publication_date: item.publication_date,
+            selectionReason: item.selectionReason || 'Sugerida pelo algoritmo'
+        }));
+        
+        console.log(`[API] Retornando ${validSuggestions.length} sugestões validadas`);
+        res.json({ suggestions: validSuggestions });
     } catch (err) {
         console.error("Erro CRÍTICO ao gerar seleção:", err);
+        console.error("Stack:", err.stack);
         res.status(500).json({ 
             error: 'Erro ao gerar seleção editorial.',
             details: err.message,
-            stack: err.stack 
+            message: 'Verifique se há notícias coletadas no banco de dados. Clique em "Coletar Notícias" primeiro.',
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
         });
     }
 });
@@ -433,20 +451,26 @@ app.post('/api/admin/selection/save', verifyAdmin, async (req, res) => {
             return res.status(400).json({ error: 'Seleção inválida.' });
         }
         
+        // Validar que cada item tem um ID
+        for (const item of selection) {
+            if (!item.id) {
+                return res.status(400).json({ error: 'Todas as notícias devem ter um ID válido.' });
+            }
+        }
+        
         const SelectionRepository = require('./repositories/selectionRepository');
         const selectionRepo = new SelectionRepository(pool);
         
-        // Remove a seleção atual do dia (se existir) para sobrescrever com a nova ordem manual
-        const today = new Date().toISOString().split('T')[0];
-        await pool.execute('DELETE FROM edition_selections WHERE edition_date = ?', [today]);
-        
         // Salva a nova seleção configurada manualmente pelo usuário
+        // A função saveSelections já faz o DELETE internamente
         await selectionRepo.saveSelections(selection, 'manual_override_v1');
         
-        res.json({ message: 'Edição salva com sucesso.' });
+        console.log(`[API] ✅ Edição salva com sucesso. ${selection.length} notícias registradas.`);
+        res.json({ message: 'Edição salva com sucesso.', count: selection.length });
     } catch (err) {
         console.error("Erro ao salvar seleção:", err);
-        res.status(500).json({ error: 'Erro ao salvar edição.' });
+        console.error("Stack:", err.stack);
+        res.status(500).json({ error: 'Erro ao salvar edição.', details: err.message });
     }
 });
 

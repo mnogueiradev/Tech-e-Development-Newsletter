@@ -22,9 +22,12 @@ class SelectionEngine {
 
         if (candidates.length === 0) {
             console.log(`[SELECTION_ENGINE] ⚠️ Nenhuma notícia recente encontrada para seleção.`);
+            console.log(`[SELECTION_ENGINE] 💡 Dica: Execute a coleta de notícias (/api/admin/news/collect) para gerar candidatas.`);
             return [];
         }
 
+        console.log(`[SELECTION_ENGINE] 📊 Iniciando avaliação editorial de ${candidates.length} candidatas...`);
+        
         this.rules.reset();
         const finalSelection = [];
 
@@ -34,6 +37,7 @@ class SelectionEngine {
         for (const news of candidates) {
             // Se já enchemos a newsletter, para o loop
             if (finalSelection.length >= config.limits.maxNewsPerEdition) {
+                console.log(`[SELECTION_ENGINE] ✋ Limite de ${config.limits.maxNewsPerEdition} notícias atingido.`);
                 break;
             }
 

@@ -79,7 +79,8 @@ class NewsRepository {
                 limit = 10;
             }
             const [rows] = await this.pool.execute(
-                `SELECT n.id, n.title, s.name as source_name, n.original_link, n.score, n.publication_date, n.status, n.tags, n.category 
+                `SELECT n.id, n.title, n.description, s.name as source_name, n.original_link, n.score, 
+                        n.publication_date, n.status, n.tags, n.category, n.main_image, n.author
                  FROM news_v2 n
                  LEFT JOIN news_sources s ON n.source_id = s.id
                  WHERE n.publication_date >= NOW() - INTERVAL 48 HOUR 
@@ -89,7 +90,12 @@ class NewsRepository {
                 [limitNum]
             );
             console.log(`[NewsRepo] Top News encontradas: ${rows.length}`);
-            return rows;
+            
+            // Garantir que cada notícia tem um source_name, mesmo se NULL no DB
+            return rows.map(row => ({
+                ...row,
+                source_name: row.source_name || 'Fonte Desconhecida'
+            }));
         } catch (error) {
             console.error('[NewsRepo] Erro ao buscar Top News:', error);
             console.error(error.stack);
