@@ -721,7 +721,7 @@ async function processAndSendNewsletter(tz = null) {
             const htmlContent = buildEmailHtml(newsBR, topic);
 
             const { data, error } = await resend.emails.send({
-                from: 'onboarding@resend.dev',
+                from: 'newsletter@techndevn.com',
                 to: bccEmails, // Em modo de teste (onboarding), você não pode usar bcc para vários emails.
                 subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                 html: htmlContent
