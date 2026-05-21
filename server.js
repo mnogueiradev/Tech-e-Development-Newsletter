@@ -765,8 +765,8 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 
         // Envia email usando Resend
         const { data, error } = await resend.emails.send({
-            from: 'onboarding@resend.dev',
-            to: [email],
+            from: 'newsletter@techndevn.com',
+            to: email,
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
             html: htmlContent
         });
