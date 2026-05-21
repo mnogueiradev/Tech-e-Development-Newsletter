@@ -723,7 +723,7 @@ async function processAndSendNewsletter(tz = null) {
             const { data, error } = await resend.emails.send({
                 from: 'newsletter@techndevn.com',
                 to: 'nogmath185@gmail.com', 
-                bcc: bccEmails
+                bcc: bccEmails,
                 subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                 html: htmlContent
             });
