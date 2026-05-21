@@ -1,0 +1,78 @@
+const config = require('../../config/selectionConfig');
+const EditorialRules = require('./editorialRules');
+const SelectionRepository = require('../../repositories/selectionRepository');
+const NewsRepository = require('../../repositories/newsRepository');
+
+class SelectionEngine {
+    constructor(pool) {
+        this.selectionRepo = new SelectionRepository(pool);
+        this.newsRepo = new NewsRepository(pool);
+        this.rules = new EditorialRules();
+    }
+
+    /**
+     * Roda o algoritmo de curadoria para montar a newsletter do dia
+     */
+    async runDailySelection(dryRun = false) {
+        console.log(`\n[SELECTION_ENGINE] 🎩 Iniciando seleção editorial para a newsletter de hoje.`);
+        
+        // 1. Busca um pacote generoso de Top News (ex: as 30 melhores)
+        // Isso nos dá opções para rejeitar algumas e continuar preenchendo a lista
+        const candidates = await this.newsRepo.getTopNews(30);
+
+        if (candidates.length === 0) {
+            console.log(`[SELECTION_ENGINE] ⚠️ Nenhuma notícia recente encontrada para seleção.`);
+            console.log(`[SELECTION_ENGINE] 💡 Dica: Execute a coleta de notícias (/api/admin/news/collect) para gerar candidatas.`);
+            return [];
+        }
+
+        console.log(`[SELECTION_ENGINE] 📊 Iniciando avaliação editorial de ${candidates.length} candidatas...`);
+        
+        this.rules.reset();
+        const finalSelection = [];
+
+        console.log(`\n================= AVALIAÇÃO EDITORIAL =================`);
+
+        // 2. Itera pelas candidatas (que já vêm ordenadas pelo maior Score)
+        for (const news of candidates) {
+            // Se já enchemos a newsletter, para o loop
+            if (finalSelection.length >= config.limits.maxNewsPerEdition) {
+                console.log(`[SELECTION_ENGINE] ✋ Limite de ${config.limits.maxNewsPerEdition} notícias atingido.`);
+                break;
+            }
+
+            // 3. Submete a notícia às regras editoriais (diversidade, repetição, etc)
+            const evaluation = this.rules.evaluate(news);
+
+            if (evaluation.passed) {
+                console.log(`✅ [SELECIONADA] [Score: ${news.score}] ${news.title}`);
+                console.log(`   -> Motivos: ${evaluation.reason}`);
+                
+                news.selectionReason = evaluation.reason;
+                this.rules.registerSelection(news);
+                finalSelection.push(news);
+            } else {
+                console.log(`❌ [REJEITADA]   [Score: ${news.score}] ${news.title}`);
+                console.log(`   -> Motivos: ${evaluation.reason}`);
+            }
+        }
+
+        console.log(`=======================================================\n`);
+
+        if (finalSelection.length > 0) {
+            // 4. Salva a seleção no banco apenas se não for dryRun
+            if (!dryRun) {
+                await this.selectionRepo.saveSelections(finalSelection, config.version);
+                console.log(`[SELECTION_ENGINE] 🏆 Seleção salva no banco: ${finalSelection.length} notícias escolhidas.`);
+            } else {
+                console.log(`[SELECTION_ENGINE] 🧪 Dry-run concluído: ${finalSelection.length} notícias recomendadas.`);
+            }
+        } else {
+            console.warn(`[SELECTION_ENGINE] ⚠️ Nenhuma notícia atendeu aos critérios editoriais hoje.`);
+        }
+
+        return finalSelection;
+    }
+}
+
+module.exports = SelectionEngine;
