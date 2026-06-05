@@ -696,8 +696,7 @@ async function processAndSendNewsletter(tz = null) {
         }, {});
 
         for (const [topic, emails] of Object.entries(subscribersByTopic)) {
-            const bccEmails = emails.join(', ');
-            console.log(`Processando tópico '${topic}' para: ${bccEmails}`);
+            console.log(`Processando tópico '${topic}' para: ${emails.join(', ')}`);
 
             const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
             const queries = {
@@ -722,7 +721,8 @@ async function processAndSendNewsletter(tz = null) {
 
             const { data, error } = await resend.emails.send({
                 from: 'newsletter@techndevn.com',
-                to: bccEmails, // Em modo de teste (onboarding), você não pode usar bcc para vários emails.
+                to: ['newsletter@techndevn.com'],
+                bcc: emails,
                 subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                 html: htmlContent
             });
