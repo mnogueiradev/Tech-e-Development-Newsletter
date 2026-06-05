@@ -3,6 +3,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
+const moment = require('moment-timezone');
 const path = require('path');
 const { Resend } = require('resend');
 const helmet = require('helmet');
@@ -163,8 +164,6 @@ app.post('/subscribe', subscribeLimiter, async (req, res) => {
                 error: "Falha ao enviar email de confirmação. O Resend pode ter bloqueado (verifique os logs ou se usou um email não autorizado no sandbox)."
             });
         }
-
-        scheduleCronForTimezone(userTZ);
 
         res.json({ success: true });
 
@@ -789,29 +788,36 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 // ========================
 // ⏰ CRON
 // =======================
-const scheduledTimezones = new Set();
-
-function scheduleCronForTimezone(tz) {
-    if (scheduledTimezones.has(tz)) return;
-
-    cron.schedule('0 8 * * *', () => {
-        console.log(`⏰ Enviando newsletter (${tz})`);
-        processAndSendNewsletter(tz);
-    }, { timezone: tz });
-
-    scheduledTimezones.add(tz);
-}
-
 async function loadSchedules() {
     if (!pool) return;
-    try {
-        const [rows] = await pool.query('SELECT DISTINCT timezone FROM subscribers WHERE timezone IS NOT NULL');
-        rows.forEach(row => {
-            scheduleCronForTimezone(row.timezone);
-        });
-    } catch (err) {
-        console.error('Erro ao carregar fusos horários do banco:', err.message);
-    }
+
+    // Agenda um único cron global que executa todo minuto 0 (uma vez por hora)
+    cron.schedule('0 * * * *', async () => {
+        console.log(`⏰ [CRON GLOBAL] Verificando envios... Hora do servidor: ${new Date().toISOString()}`);
+        try {
+            const [rows] = await pool.query('SELECT DISTINCT timezone FROM subscribers WHERE timezone IS NOT NULL');
+            
+            for (const row of rows) {
+                const tz = row.timezone;
+                try {
+                    // Pega a hora atual usando moment-timezone
+                    const currentHourInTz = moment().tz(tz).hour();
+                    
+                    // Se for 8h da manhã neste fuso, faz o envio
+                    if (currentHourInTz === 8) {
+                        console.log(`⏰ É 8h no fuso ${tz}. Disparando newsletter...`);
+                        processAndSendNewsletter(tz);
+                    }
+                } catch (err) {
+                    console.error(`Erro ao verificar hora para o fuso ${tz}:`, err.message);
+                }
+            }
+        } catch (err) {
+            console.error('Erro no cron global de verificação de fusos:', err.message);
+        }
+    });
+
+    console.log('✅ Cron Global inicializado. Ele irá verificar os fusos horários toda hora.');
 }
 
 // ========================
