@@ -84,6 +84,8 @@ async function initDB() {
         // Inicialização da parte de coleta de notícias (RSS)
         await initializeDatabase(pool);
         initNewsScheduler(pool);
+
+        setTimeout(() => { console.log('🔥 Iniciando disparo forçado de teste!'); processAndSendNewsletter(); }, 5000);
     } catch (err) {
         console.error('❌ Erro no DB:', err.message);
         process.exit(1);
@@ -792,7 +794,7 @@ const scheduledTimezones = new Set();
 function scheduleCronForTimezone(tz) {
     if (scheduledTimezones.has(tz)) return;
 
-    cron.schedule('50 11 * * *', () => {
+    cron.schedule('0 8 * * *', () => {
         console.log(`⏰ Enviando newsletter (${tz})`);
         processAndSendNewsletter(tz);
     }, { timezone: tz });
