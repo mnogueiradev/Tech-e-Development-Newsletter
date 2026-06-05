@@ -792,7 +792,7 @@ const scheduledTimezones = new Set();
 function scheduleCronForTimezone(tz) {
     if (scheduledTimezones.has(tz)) return;
 
-    cron.schedule('0 8 * * *', () => {
+    cron.schedule('50 11 * * *', () => {
         console.log(`⏰ Enviando newsletter (${tz})`);
         processAndSendNewsletter(tz);
     }, { timezone: tz });
