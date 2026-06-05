@@ -791,8 +791,8 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 async function loadSchedules() {
     if (!pool) return;
 
-    // Agenda o cron global para executar no minuto 15 de toda hora (para teste)
-    cron.schedule('15 * * * *', async () => {
+    // Agenda um único cron global que executa todo minuto 0 (uma vez por hora)
+    cron.schedule('0 * * * *', async () => {
         console.log(`⏰ [CRON GLOBAL] Verificando envios... Hora do servidor: ${new Date().toISOString()}`);
         try {
             const [rows] = await pool.query('SELECT DISTINCT timezone FROM subscribers WHERE timezone IS NOT NULL');
@@ -803,9 +803,9 @@ async function loadSchedules() {
                     // Pega a hora atual usando moment-timezone
                     const currentHourInTz = moment().tz(tz).hour();
                     
-                    // Se for 12h neste fuso (junto com o minuto 15 do cron = 12:15), faz o envio
-                    if (currentHourInTz === 12) {
-                        console.log(`⏰ É 12:15 no fuso ${tz}. Disparando newsletter de teste...`);
+                    // Se for 8h da manhã neste fuso, faz o envio
+                    if (currentHourInTz === 8) {
+                        console.log(`⏰ É 8h no fuso ${tz}. Disparando newsletter...`);
                         processAndSendNewsletter(tz);
                     }
                 } catch (err) {
@@ -817,7 +817,7 @@ async function loadSchedules() {
         }
     });
 
-    console.log('✅ Cron Global inicializado. Ele irá verificar os fusos horários toda hora (teste: minuto 15).');
+    console.log('✅ Cron Global inicializado. Ele irá verificar os fusos horários toda hora.');
 }
 
 // ========================
