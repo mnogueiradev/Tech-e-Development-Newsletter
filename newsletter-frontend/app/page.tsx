@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-
-// URL do backend no Render
-const API_URL = "https://tech-e-development-newsletter.onrender.com/subscribe";
+import { SUBSCRIBE_URL } from "../lib/api";
 
 export default function Home() {
   const [email, setEmail] = useState("");
@@ -35,7 +33,7 @@ export default function Home() {
     setSuccess(false);
 
     try {
-      const res = await fetch(API_URL, {
+      const res = await fetch(SUBSCRIBE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

@@ -5,7 +5,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "cd newsletter-frontend && npm install && npm run build",
-    "start": "node server.js"
+    "build:prod": "cd newsletter-frontend && npm install && npm run build",
+    "start": "node server.js",
+    "start:pm2": "pm2 start deploy/ecosystem.config.cjs",
+    "deploy:oracle": "npm install --omit=dev && npm run build && pm2 restart newsletter || pm2 start deploy/ecosystem.config.cjs"
   },
   "keywords": [],
   "author": "",

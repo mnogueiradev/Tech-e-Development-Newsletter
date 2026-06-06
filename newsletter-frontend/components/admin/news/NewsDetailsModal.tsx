@@ -1,13 +1,12 @@
 import { useState, useEffect } from "react";
 import { X, ExternalLink, Save, CheckCircle, XCircle } from "lucide-react";
+import { API_BASE_URL } from "../../../lib/api";
 
 interface ModalProps {
   newsId: number | null;
   onClose: () => void;
   onStatusChange: (id: number, status: string) => void;
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://tech-e-development-newsletter.onrender.com";
 
 export function NewsDetailsModal({ newsId, onClose, onStatusChange }: ModalProps) {
   const [news, setNews] = useState<any>(null);
@@ -21,7 +20,7 @@ export function NewsDetailsModal({ newsId, onClose, onStatusChange }: ModalProps
       setLoading(true);
       try {
         const token = localStorage.getItem("admin_token");
-        const res = await fetch(`${API_URL}/api/admin/news/${newsId}`, {
+        const res = await fetch(`${API_BASE_URL}/api/admin/news/${newsId}`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (res.ok) {
@@ -47,7 +46,7 @@ export function NewsDetailsModal({ newsId, onClose, onStatusChange }: ModalProps
     setSavingNotes(true);
     try {
       const token = localStorage.getItem("admin_token");
-      await fetch(`${API_URL}/api/admin/news/${newsId}/notes`, {
+      await fetch(`${API_BASE_URL}/api/admin/news/${newsId}/notes`, {
         method: 'PATCH',
         headers: { 
           "Authorization": `Bearer ${token}`,

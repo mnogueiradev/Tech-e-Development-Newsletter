@@ -7,8 +7,7 @@ import Link from "next/link";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableNewsItem } from "../../../components/admin/selection/SortableNewsItem";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://tech-e-development-newsletter.onrender.com";
+import { API_BASE_URL } from "../../../lib/api";
 
 export default function AdminSelection() {
   const [loading, setLoading] = useState(false);
@@ -41,7 +40,7 @@ export default function AdminSelection() {
         return;
       }
 
-      const res = await fetch(`${API_URL}/api/admin/selection/generate`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/selection/generate`, {
         method: "GET",
         headers: { "Authorization": `Bearer ${token}` }
       });
@@ -127,7 +126,7 @@ export default function AdminSelection() {
         publication_date: item.publication_date
       }));
 
-      const res = await fetch(`${API_URL}/api/admin/selection/save`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/selection/save`, {
         method: "POST",
         headers: { 
           "Authorization": `Bearer ${token}`,

@@ -8,8 +8,7 @@ import Link from "next/link";
 import { NewsFilters } from "../../../components/admin/news/NewsFilters";
 import { NewsTable } from "../../../components/admin/news/NewsTable";
 import { NewsDetailsModal } from "../../../components/admin/news/NewsDetailsModal";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://tech-e-development-newsletter.onrender.com";
+import { API_BASE_URL } from "../../../lib/api";
 
 export default function AdminNewsCMS() {
   const [loading, setLoading] = useState(true);
@@ -33,7 +32,7 @@ export default function AdminNewsCMS() {
 
   const fetchFilters = async (token: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/admin/news/filters`, { headers: { "Authorization": `Bearer ${token}` } });
+      const res = await fetch(`${API_BASE_URL}/api/admin/news/filters`, { headers: { "Authorization": `Bearer ${token}` } });
       if (res.ok) setFilterOptions(await res.json());
     } catch (err) {
       console.error(err);
@@ -50,7 +49,7 @@ export default function AdminNewsCMS() {
     setLoading(true);
     try {
       const params = new URLSearchParams(filters as any).toString();
-      const res = await fetch(`${API_URL}/api/admin/news?${params}`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/news?${params}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
 
@@ -79,7 +78,7 @@ export default function AdminNewsCMS() {
   const handleStatusChange = async (id: number, status: string) => {
     try {
       const token = localStorage.getItem("admin_token");
-      await fetch(`${API_URL}/api/admin/news/${id}/status`, {
+      await fetch(`${API_BASE_URL}/api/admin/news/${id}/status`, {
         method: 'PATCH',
         headers: { 
           "Authorization": `Bearer ${token}`,
@@ -99,7 +98,7 @@ export default function AdminNewsCMS() {
     try {
       const token = localStorage.getItem("admin_token");
       alert("A coleta de notícias foi iniciada em segundo plano. Este processo pode levar alguns minutos. Recarregue a página em breve para ver as novas notícias.");
-      await fetch(`${API_URL}/api/admin/news/collect`, {
+      await fetch(`${API_BASE_URL}/api/admin/news/collect`, {
         method: 'POST',
         headers: { "Authorization": `Bearer ${token}` }
       });

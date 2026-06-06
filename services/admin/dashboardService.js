@@ -128,7 +128,7 @@ class DashboardService {
                 recentActivity: recentActivity.slice(0, 5),
                 topNews,
                 operationalStatus: {
-                    render: true,
+                    server: true,
                     brave_api: braveOk,
                     resend: resendOk,
                     db: dbConnected,

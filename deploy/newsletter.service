@@ -1,0 +1,20 @@
+[Unit]
+Description=Tech & Development Newsletter (Node.js)
+After=network.target
+
+[Service]
+Type=simple
+User=opc
+WorkingDirectory=/opt/newsletter
+EnvironmentFile=/opt/newsletter/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/newsletter/out.log
+StandardError=append:/var/log/newsletter/error.log
+
+# Limites seguros para VM Always Free (1 GB RAM)
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

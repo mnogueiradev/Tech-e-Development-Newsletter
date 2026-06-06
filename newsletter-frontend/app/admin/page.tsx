@@ -8,8 +8,7 @@ import { StatCard } from "../../components/admin/DashboardCards";
 import { RecentActivity } from "../../components/admin/RecentActivity";
 import { TopNews } from "../../components/admin/TopNews";
 import { OperationalStatus } from "../../components/admin/OperationalStatus";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://tech-e-development-newsletter.onrender.com";
+import { API_BASE_URL } from "../../lib/api";
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
@@ -29,7 +28,7 @@ export default function AdminDashboard() {
     if (isRefresh) setRefreshing(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/admin/dashboard`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/dashboard`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
 
