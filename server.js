@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const { initializeDatabase } = require('./repositories/dbInit');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
+const { translateNewsItems } = require('./services/newsTranslation');
 const jwt = require('jsonwebtoken');
 
 
@@ -488,7 +489,7 @@ async function fetchOlharDigitalNews(count = 1, topic = 'tecnologia') {
 
     // Usa a query específica para cada tópico, e pede mais resultados para podermos filtrar os que têm imagem
     const topicQuery = topic === 'financas' ? 'finanças mercado' : 'tecnologia';
-    const url = `https://api.search.brave.com/res/v1/news/search?q=site:olhardigital.com.br%20${encodeURIComponent(topicQuery)}&country=br&count=10&freshness=pd`;
+    const url = `https://api.search.brave.com/res/v1/news/search?q=site:olhardigital.com.br%20${encodeURIComponent(topicQuery)}&country=br&search_lang=pt&count=10&freshness=pd`;
 
     // Tenta até 3 vezes caso dê erro de "fetch failed" ou 429
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -551,7 +552,7 @@ async function fetchFromBraveSearch(query, country, count = 3) {
     }
 
     // Pede 20 resultados para garantir que acharemos o suficiente com imagens
-    const url = `https://api.search.brave.com/res/v1/news/search?q=${encodeURIComponent(query)}&country=${country}&count=20&freshness=pd`;
+    const url = `https://api.search.brave.com/res/v1/news/search?q=${encodeURIComponent(query)}&country=${country}&search_lang=pt&count=20&freshness=pd`;
 
     // Tenta até 3 vezes caso dê erro de "fetch failed" ou 429
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -712,11 +713,12 @@ async function processAndSendNewsletter(tz = null) {
             ]);
 
             // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
-            const newsBR = [...olharNews, ...generalNews].slice(0, 9);
+            let newsBR = [...olharNews, ...generalNews].slice(0, 9);
 
             console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
 
-            // 2. Montar HTML com o tópico correto
+            newsBR = await translateNewsItems(newsBR);
+
             const htmlContent = buildEmailHtml(newsBR, topic);
 
             const { data, error } = await resend.emails.send({
@@ -756,9 +758,11 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         ]);
 
         // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
-        const newsBR = [...olharNews, ...generalNews].slice(0, 9);
+        let newsBR = [...olharNews, ...generalNews].slice(0, 9);
 
         console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
+
+        newsBR = await translateNewsItems(newsBR);
 
         const htmlContent = buildEmailHtml(newsBR, topic);
 
