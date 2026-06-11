@@ -17,6 +17,7 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM_EMAIL = process.env.FROM_EMAIL || 'newsletter@techndevn.com';
 
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -672,7 +673,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
         </div>
 
         <div style="padding: 20px; text-align: center; font-size: 12px; color: #000000;">
-            <p>Enviado por newsletter@techndevn.com</p>
+            <p>Enviado por ${FROM_EMAIL}</p>
             <p>© ${new Date().getFullYear()} Tech & Development Newsletter. Todos os direitos reservados.</p>
         </div>
     </div>
@@ -731,9 +732,10 @@ async function processAndSendNewsletter(tz = null) {
             const htmlContent = buildEmailHtml(newsBR, topic);
 
             // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
+            console.log('Enviando newsletters com FROM=', FROM_EMAIL);
             const sendPromises = emails.map(email => {
                 return resend.emails.send({
-                    from: 'newsletter@techndevn.com',
+                    from: FROM_EMAIL,
                     to: email,
                     subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                     html: htmlContent
@@ -741,7 +743,16 @@ async function processAndSendNewsletter(tz = null) {
             });
 
             const results = await Promise.allSettled(sendPromises);
-            
+
+            results.forEach((r, i) => {
+                const toEmail = emails[i];
+                if (r.status === 'fulfilled') {
+                    console.log(`Enviado para ${toEmail}:`, r.value);
+                } else {
+                    console.error(`Falha ao enviar para ${toEmail}:`, r.reason || r);
+                }
+            });
+
             const failed = results.filter(r => r.status === 'rejected' || (r.value && r.value.error));
             if (failed.length > 0) {
                 console.error(`Erro ao enviar newsletter '${topic}' para ${failed.length} inscritos.`);
@@ -781,19 +792,23 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         const htmlContent = buildEmailHtml(newsBR, topic);
 
         // Envia email usando Resend
-        const { data, error } = await resend.emails.send({
-            from: 'newsletter@techndevn.com',
+        const sendResult = await resend.emails.send({
+            from: FROM_EMAIL,
             to: email,
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
             html: htmlContent
         });
 
-        if (error) {
-            console.error("❌ Erro ao enviar email via Resend:", error);
+        console.log('Resend sendWelcome response:', sendResult);
+
+        if (sendResult.error) {
+            console.error("❌ Erro ao enviar email via Resend:", sendResult.error);
             return false;
         }
 
-        console.log("✅ Email enviado via Resend:", data.id);
+        if (sendResult && (sendResult.id || sendResult.messageId)) {
+            console.log("✅ Email enviado via Resend:", sendResult.id || sendResult.messageId);
+        }
         return true;
 
     } catch (error) {
