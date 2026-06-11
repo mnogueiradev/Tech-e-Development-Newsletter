@@ -3,7 +3,6 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
-const moment = require('moment-timezone');
 const path = require('path');
 const { Resend } = require('resend');
 const helmet = require('helmet');
@@ -11,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const { initializeDatabase } = require('./repositories/dbInit');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
+const { translateNewsItems, isBrazilianSource } = require('./services/newsTranslation');
 const jwt = require('jsonwebtoken');
 
 
@@ -85,8 +85,6 @@ async function initDB() {
         // Inicialização da parte de coleta de notícias (RSS)
         await initializeDatabase(pool);
         initNewsScheduler(pool);
-
-        setTimeout(() => { console.log('🔥 Iniciando disparo forçado de teste!'); processAndSendNewsletter(); }, 5000);
     } catch (err) {
         console.error('❌ Erro no DB:', err.message);
         process.exit(1);
@@ -164,6 +162,8 @@ app.post('/subscribe', subscribeLimiter, async (req, res) => {
                 error: "Falha ao enviar email de confirmação. O Resend pode ter bloqueado (verifique os logs ou se usou um email não autorizado no sandbox)."
             });
         }
+
+        scheduleCronForTimezone(userTZ);
 
         res.json({ success: true });
 
@@ -489,7 +489,7 @@ async function fetchOlharDigitalNews(count = 1, topic = 'tecnologia') {
 
     // Usa a query específica para cada tópico, e pede mais resultados para podermos filtrar os que têm imagem
     const topicQuery = topic === 'financas' ? 'finanças mercado' : 'tecnologia';
-    const url = `https://api.search.brave.com/res/v1/news/search?q=site:olhardigital.com.br%20${encodeURIComponent(topicQuery)}&country=br&count=10&freshness=pd`;
+    const url = `https://api.search.brave.com/res/v1/news/search?q=site:olhardigital.com.br%20${encodeURIComponent(topicQuery)}&country=br&search_lang=pt&count=10&freshness=pd`;
 
     // Tenta até 3 vezes caso dê erro de "fetch failed" ou 429
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -551,61 +551,70 @@ async function fetchFromBraveSearch(query, country, count = 3) {
         return [{ title: 'Erro de Configuração API', link: '#', source: 'Sistema' }];
     }
 
-    // Pede 20 resultados para garantir que acharemos o suficiente com imagens
-    const url = `https://api.search.brave.com/res/v1/news/search?q=${encodeURIComponent(query)}&country=${country}&count=20&freshness=pd`;
+    let allBrazilianResults = [];
+    let offset = 0;
+    const maxPages = 4; // Busca até 4 páginas para garantir
 
-    // Tenta até 3 vezes caso dê erro de "fetch failed" ou 429
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-            const response = await fetch(url, {
-                headers: {
-                    'Accept': 'application/json',
-                    'Accept-Encoding': 'gzip',
-                    'X-Subscription-Token': apiKey
+    while (allBrazilianResults.length < count && offset < maxPages) {
+        const url = `https://api.search.brave.com/res/v1/news/search?q=${encodeURIComponent(query)}&country=${country}&search_lang=pt&count=50&freshness=pd&offset=${offset}`;
+
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Accept-Encoding': 'gzip',
+                        'X-Subscription-Token': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        await new Promise(r => setTimeout(r, 2000));
+                        continue;
+                    }
+                    break; // Aborta tentativa se for outro erro
                 }
-            });
 
-            if (!response.ok) {
-                console.error(`Erro na API do Brave (tentativa ${attempt}): ${response.status} - ${response.statusText}`);
-                if (response.status === 429) {
-                    await new Promise(r => setTimeout(r, 2000));
-                    continue; // Tenta de novo se for Rate Limit
+                const data = await response.json();
+                if (!data.results || data.results.length === 0) {
+                    offset = maxPages; // Força saída do while externo, não há mais resultados
+                    break; 
                 }
-                return [];
+
+                const brazilianResults = data.results.filter(item => {
+                    const urlStr = item.url || '';
+                    const sourceHost = (item.meta_url && item.meta_url.hostname) ? item.meta_url.hostname : '';
+                    return isBrazilianSource(urlStr) || isBrazilianSource(sourceHost);
+                });
+
+                allBrazilianResults = [...allBrazilianResults, ...brazilianResults];
+                break; // Sucesso, sai do retry loop
+            } catch (err) {
+                if (attempt === 3) break;
+                await new Promise(r => setTimeout(r, 2000));
             }
-
-            const data = await response.json();
-
-            if (!data.results || data.results.length === 0) {
-                console.warn(`Aviso: Nenhuma notícia retornada para ${country}. Resposta completa:`, JSON.stringify(data).substring(0, 500));
-                return [];
-            }
-
-            console.log(`Buscado com sucesso: ${data.results.length} notícias para ${country}`);
-            
-            // Filtra as que têm imagem primeiro
-            const withImage = data.results.filter(item => item.thumbnail && item.thumbnail.src);
-            // Se não tiver o suficiente, completa com as sem imagem
-            let finalResults = withImage;
-            if (finalResults.length < count) {
-                const withoutImage = data.results.filter(item => !item.thumbnail || !item.thumbnail.src);
-                finalResults = [...finalResults, ...withoutImage];
-            }
-
-            return finalResults.slice(0, count).map(item => ({
-                title: item.title,
-                link: item.url,
-                description: item.description || '',
-                image: (item.thumbnail && item.thumbnail.src) ? item.thumbnail.src : null,
-                source: (item.meta_url && item.meta_url.hostname) ? item.meta_url.hostname : 'Brave News'
-            }));
-        } catch (err) {
-            console.error(`Erro ao buscar notícias do Brave para ${country} (tentativa ${attempt}):`, err.message);
-            if (attempt === 3) return [];
-            await new Promise(r => setTimeout(r, 2000)); // Espera 2s antes de tentar de novo
         }
+        offset++;
     }
-    return [];
+
+    // Filtra as que têm imagem primeiro
+    const withImage = allBrazilianResults.filter(item => item.thumbnail && item.thumbnail.src);
+    let finalResults = withImage;
+    
+    // Completa com as que não têm imagem, caso precise
+    if (finalResults.length < count) {
+        const withoutImage = allBrazilianResults.filter(item => !item.thumbnail || !item.thumbnail.src);
+        finalResults = [...finalResults, ...withoutImage];
+    }
+
+    return finalResults.slice(0, count).map(item => ({
+        title: item.title,
+        link: item.url,
+        description: item.description || '',
+        image: (item.thumbnail && item.thumbnail.src) ? item.thumbnail.src : null,
+        source: (item.meta_url && item.meta_url.hostname) ? item.meta_url.hostname : 'Brave News'
+    }));
 }
 
 // ========================
@@ -663,7 +672,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
         </div>
 
         <div style="padding: 20px; text-align: center; font-size: 12px; color: #000000;">
-            <p>Enviado por nogmath185@gmail.com</p>
+            <p>Enviado por newsletter@techndevn.com</p>
             <p>© ${new Date().getFullYear()} Tech & Development Newsletter. Todos os direitos reservados.</p>
         </div>
     </div>
@@ -697,7 +706,7 @@ async function processAndSendNewsletter(tz = null) {
         }, {});
 
         for (const [topic, emails] of Object.entries(subscribersByTopic)) {
-            console.log(`Processando tópico '${topic}' para: ${emails.join(', ')}`);
+            console.log(`Processando tópico '${topic}' para ${emails.length} inscrito(s): ${emails.join(', ')}`);
 
             const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
             const queries = {
@@ -713,25 +722,31 @@ async function processAndSendNewsletter(tz = null) {
             ]);
 
             // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
-            const newsBR = [...olharNews, ...generalNews].slice(0, 9);
+            let newsBR = [...olharNews, ...generalNews].slice(0, 9);
 
             console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
 
-            // 2. Montar HTML com o tópico correto
+            newsBR = await translateNewsItems(newsBR);
+
             const htmlContent = buildEmailHtml(newsBR, topic);
 
-            const { data, error } = await resend.emails.send({
-                from: 'newsletter@techndevn.com',
-                to: ['newsletter@techndevn.com'],
-                bcc: emails,
-                subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
-                html: htmlContent
+            // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
+            const sendPromises = emails.map(email => {
+                return resend.emails.send({
+                    from: 'newsletter@techndevn.com',
+                    to: email,
+                    subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
+                    html: htmlContent
+                });
             });
 
-            if (error) {
-                console.error(`Erro ao enviar newsletter '${topic}' via Resend:`, error);
+            const results = await Promise.allSettled(sendPromises);
+            
+            const failed = results.filter(r => r.status === 'rejected' || (r.value && r.value.error));
+            if (failed.length > 0) {
+                console.error(`Erro ao enviar newsletter '${topic}' para ${failed.length} inscritos.`);
             } else {
-                console.log(`Newsletter '${topic}' enviada com sucesso! ID: ${data.id}`);
+                console.log(`Newsletter '${topic}' enviada com sucesso para ${emails.length} inscritos!`);
             }
         }
     } catch (err) {
@@ -757,16 +772,18 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         ]);
 
         // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
-        const newsBR = [...olharNews, ...generalNews].slice(0, 9);
+        let newsBR = [...olharNews, ...generalNews].slice(0, 9);
 
         console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
+
+        newsBR = await translateNewsItems(newsBR);
 
         const htmlContent = buildEmailHtml(newsBR, topic);
 
         // Envia email usando Resend
         const { data, error } = await resend.emails.send({
-            from: 'onboarding@resend.dev',
-            to: [email],
+            from: 'newsletter@techndevn.com',
+            to: email,
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
             html: htmlContent
         });
@@ -788,36 +805,29 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 // ========================
 // ⏰ CRON
 // =======================
+const scheduledTimezones = new Set();
+
+function scheduleCronForTimezone(tz) {
+    if (scheduledTimezones.has(tz)) return;
+
+    cron.schedule('0 8 * * *', () => {
+        console.log(`⏰ Enviando newsletter (${tz})`);
+        processAndSendNewsletter(tz);
+    }, { timezone: tz });
+
+    scheduledTimezones.add(tz);
+}
+
 async function loadSchedules() {
     if (!pool) return;
-
-    // Agenda um único cron global que executa todo minuto 0 (uma vez por hora)
-    cron.schedule('0 * * * *', async () => {
-        console.log(`⏰ [CRON GLOBAL] Verificando envios... Hora do servidor: ${new Date().toISOString()}`);
-        try {
-            const [rows] = await pool.query('SELECT DISTINCT timezone FROM subscribers WHERE timezone IS NOT NULL');
-            
-            for (const row of rows) {
-                const tz = row.timezone;
-                try {
-                    // Pega a hora atual usando moment-timezone
-                    const currentHourInTz = moment().tz(tz).hour();
-                    
-                    // Se for 8h da manhã neste fuso, faz o envio
-                    if (currentHourInTz === 8) {
-                        console.log(`⏰ É 8h no fuso ${tz}. Disparando newsletter...`);
-                        processAndSendNewsletter(tz);
-                    }
-                } catch (err) {
-                    console.error(`Erro ao verificar hora para o fuso ${tz}:`, err.message);
-                }
-            }
-        } catch (err) {
-            console.error('Erro no cron global de verificação de fusos:', err.message);
-        }
-    });
-
-    console.log('✅ Cron Global inicializado. Ele irá verificar os fusos horários toda hora.');
+    try {
+        const [rows] = await pool.query('SELECT DISTINCT timezone FROM subscribers WHERE timezone IS NOT NULL');
+        rows.forEach(row => {
+            scheduleCronForTimezone(row.timezone);
+        });
+    } catch (err) {
+        console.error('Erro ao carregar fusos horários do banco:', err.message);
+    }
 }
 
 // ========================
