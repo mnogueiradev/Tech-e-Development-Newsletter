@@ -31,7 +31,12 @@ function sleep(ms) {
 
 function isBrazilianSource(sourceOrUrl) {
     if (!sourceOrUrl) return false;
-    const value = String(sourceOrUrl).toLowerCase();
+    let value = String(sourceOrUrl).toLowerCase();
+    try {
+        if (value.startsWith('http')) {
+            value = new URL(value).hostname;
+        }
+    } catch (e) {}
     return BRAZILIAN_HOST_PATTERNS.some((pattern) => pattern.test(value));
 }
 
