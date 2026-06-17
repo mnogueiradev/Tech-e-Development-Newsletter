@@ -35,6 +35,29 @@ class SelectionRepository {
             throw error;
         }
     }
+
+    /**
+     * Busca as notícias selecionadas para a edição de hoje
+     */
+    async getTodaySelections() {
+        const todayStr = new Date().toISOString().split('T')[0];
+        try {
+            const [rows] = await this.pool.execute(`
+                SELECT n.id, n.title, n.description, s.name as source_name, n.original_link, 
+                       n.main_image, es.position, n.category
+                FROM edition_selections es
+                JOIN news_v2 n ON es.news_id = n.id
+                LEFT JOIN news_sources s ON n.source_id = s.id
+                WHERE es.edition_date = ?
+                ORDER BY es.position ASC
+            `, [todayStr]);
+            
+            return rows;
+        } catch (error) {
+            console.error('[SelectionRepo] ❌ Erro ao buscar seleções de hoje:', error);
+            return [];
+        }
+    }
 }
 
 module.exports = SelectionRepository;

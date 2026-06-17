@@ -680,6 +680,42 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     `;
 }
 
+async function getNewsletterItems(topic) {
+    const SelectionRepository = require('./repositories/selectionRepository');
+    const SelectionEngine = require('./services/selection/selectionEngine');
+    const selectionRepo = new SelectionRepository(pool);
+    
+    let rawItems = await selectionRepo.getTodaySelections();
+    
+    // Se não houver seleção gerada hoje
+    if (!rawItems || rawItems.length === 0) {
+        console.log('[NEWSLETTER] Nenhuma seleção encontrada para hoje. Gerando automaticamente...');
+        const engine = new SelectionEngine(pool);
+        rawItems = await engine.runDailySelection(false); 
+    }
+    
+    let filteredItems = rawItems;
+    if (topic && topic !== 'tecnologia') {
+        filteredItems = rawItems.filter(item => item.category && item.category.toLowerCase().includes(topic.toLowerCase()));
+        
+        if (filteredItems.length === 0) {
+            console.log(`[NEWSLETTER] Nenhuma notícia encontrada para o tópico ${topic}. Buscando do repositório...`);
+            const NewsRepository = require('./repositories/newsRepository');
+            const newsRepo = new NewsRepository(pool);
+            const fallback = await newsRepo.getTopNews(30);
+            filteredItems = fallback.filter(item => item.category && item.category.toLowerCase().includes(topic.toLowerCase()));
+        }
+    }
+    
+    return filteredItems.slice(0, 9).map(item => ({
+        title: item.title,
+        link: item.original_link || item.link || '#',
+        description: item.description || '',
+        image: item.main_image || item.image || null,
+        source: item.source_name || item.source || 'Fonte Desconhecida'
+    }));
+}
+
 async function processAndSendNewsletter(tz = null) {
     console.log(`Iniciando processamento da newsletter diária${tz ? ` para o fuso ${tz}` : ''}...`);
 
@@ -709,23 +745,10 @@ async function processAndSendNewsletter(tz = null) {
         for (const [topic, emails] of Object.entries(subscribersByTopic)) {
             console.log(`Processando tópico '${topic}' para ${emails.length} inscrito(s): ${emails.join(', ')}`);
 
-            const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-            const queries = {
-                tecnologia: 'tecnologia',
-                financas: 'finanças mercado'
-            };
-            const q = queries[topic] || queries['tecnologia'];
+            // Obter notícias do banco de dados (V2)
+            let newsBR = await getNewsletterItems(topic);
 
-            // Busca 1 notícia do Olhar Digital e 8 notícias gerais
-            const [olharNews, generalNews] = await Promise.all([
-                fetchOlharDigitalNews(1, topic),
-                fetchFromBraveSearch(q, 'br', 8)
-            ]);
-
-            // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
-            let newsBR = [...olharNews, ...generalNews].slice(0, 9);
-
-            console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
+            console.log(`📰 Notícias preparadas para '${topic}': ${newsBR.length} itens`);
 
             newsBR = await translateNewsItems(newsBR);
 
@@ -769,23 +792,10 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
     console.log(`📨 Enviando newsletter de boas-vindas para: ${email}`);
 
     try {
-        const queries = {
-            tecnologia: 'tecnologia',
-            financas: 'finanças mercado'
-        };
+        // Obter notícias do banco de dados (V2)
+        let newsBR = await getNewsletterItems(topic);
 
-        const q = queries[topic] || queries['tecnologia'];
-
-        // Busca 1 notícia do Olhar Digital e 8 notícias gerais
-        const [olharNews, generalNews] = await Promise.all([
-            fetchOlharDigitalNews(1, topic),
-            fetchFromBraveSearch(q, 'br', 8)
-        ]);
-
-        // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
-        let newsBR = [...olharNews, ...generalNews].slice(0, 9);
-
-        console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
+        console.log(`📰 Notícias preparadas para '${topic}': ${newsBR.length} itens`);
 
         newsBR = await translateNewsItems(newsBR);
 
