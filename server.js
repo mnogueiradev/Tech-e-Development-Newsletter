@@ -414,25 +414,52 @@ app.get('/api/unsubscribe', async (req, res) => {
         const { token } = req.query;
         if (!token) return res.status(400).send('<h1>Link inv&aacute;lido ou expirado.</h1>');
 
+        // Apenas valida o token, mas NÃO deleta ainda.
         const decoded = jwt.verify(token, JWT_SECRET);
         const email = decoded.email;
 
-        await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
-
+        // Renderiza a tela de confirmação (evita cliques acidentais no rodapé)
         res.send(`
-            <div style="font-family: sans-serif; max-width: 600px; margin: 40px auto; text-align: center; padding: 20px;">
-                <h1 style="color: #333;">Inscri&ccedil;&atilde;o cancelada</h1>
-                <p style="color: #666; font-size: 16px;">Voc&ecirc; n&atilde;o receber&aacute; mais nossos e-mails no endere&ccedil;o <strong>${email}</strong>.</p>
-            </div>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>Cancelar Inscrição</title>
+                <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+                    .card { background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 40px 30px; max-width: 400px; text-align: center; }
+                    h1 { color: #0f172a; font-size: 24px; margin-top: 0; }
+                    p { color: #475569; font-size: 16px; margin-bottom: 30px; line-height: 1.5; }
+                    .btn { background-color: #dc2626; color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; width: 100%; box-sizing: border-box; }
+                    .btn:hover { background-color: #b91c1c; }
+                    .cancel-link { display: block; margin-top: 15px; color: #64748b; text-decoration: none; font-size: 14px; }
+                    .cancel-link:hover { text-decoration: underline; color: #0f172a; }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>Cancelar Inscrição</h1>
+                    <p>Tem certeza que deseja parar de receber a nossa newsletter no e-mail <strong>${email}</strong>?</p>
+                    <form action="/api/unsubscribe" method="POST">
+                        <input type="hidden" name="token" value="${token}">
+                        <input type="hidden" name="source" value="web">
+                        <button type="submit" class="btn">Sim, quero cancelar</button>
+                    </form>
+                    <a href="https://techndevn.com" class="cancel-link">Não, quero continuar recebendo</a>
+                </div>
+            </body>
+            </html>
         `);
     } catch (err) {
-        res.status(400).send('<h1>Link inv&aacute;lido ou expirado.</h1>');
+        res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif;"><h1>Link inv&aacute;lido ou expirado.</h1></div>');
     }
 });
 
 app.post('/api/unsubscribe', async (req, res) => {
     try {
         const token = req.query.token || req.body.token;
+        const source = req.body.source; // Identifica se veio do formulário web
         if (!token) return res.status(400).send('Token missing');
 
         const decoded = jwt.verify(token, JWT_SECRET);
@@ -440,8 +467,37 @@ app.post('/api/unsubscribe', async (req, res) => {
 
         await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
         
+        // Se veio do formulário web, mostra uma tela bonitinha de sucesso
+        if (source === 'web') {
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Inscrição Cancelada</title>
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+                        .card { background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 40px 30px; max-width: 400px; text-align: center; }
+                        h1 { color: #16a34a; font-size: 24px; margin-top: 0; }
+                        p { color: #475569; font-size: 16px; margin-bottom: 0; line-height: 1.5; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>Inscrição Cancelada</h1>
+                        <p>Você não receberá mais nossos e-mails no endereço <strong>${email}</strong>. Foi bom ter você com a gente!</p>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+
+        // Se veio do botão nativo do Gmail (One-Click), exige apenas HTTP 200 silencioso
         res.status(200).send('Unsubscribed');
     } catch (err) {
+        if (req.body.source === 'web') {
+            return res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif;"><h1>Erro ao cancelar: link inválido ou expirado.</h1></div>');
+        }
         res.status(400).send('Invalid token');
     }
 });
