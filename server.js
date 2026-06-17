@@ -496,47 +496,47 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     };
 
     const renderNewsItem = (item) => `
-        <div style="margin-bottom: 30px; padding: 20px;">
-            <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                    ${item.image ? '<td width="120" valign="top" style="padding-right: 15px;"><img src="' + item.image + '" alt="Imagem da notícia" style="width: 120px; height: 80px; object-fit: cover; border-radius: 8px;" onerror="this.onerror=null; this.src=\'https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png\';"></td>' : ''}
-                    <td valign="top">
-                        <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #000000; line-height: 1.3;">${escapeHtml(item.title)}</h3>
-                        ${item.description ? '<p style="margin: 0 0 15px 0; font-size: 14px; color: #000000; line-height: 1.6;">' + escapeHtml(item.description) + '</p>' : ''}
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
-                            <tr>
-                                <td align="left" style="font-size: 12px; color: #000000;">
-                                    Fonte: <strong>${escapeHtml(item.source)}</strong>
-                                </td>
-                                <td align="right">
-                                    <a href="${item.link}" style="color: #000000; text-decoration: underline; font-size: 13px; font-weight: bold;">Ler na íntegra ➔</a>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
+        <div style="margin-bottom: 30px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            ${item.image ? `<a href="${item.link}" target="_blank" style="display: block; text-decoration: none;"><img src="${item.image}" alt="Imagem da notícia" style="width: 100%; height: 200px; object-fit: cover; display: block; border-bottom: 1px solid #e2e8f0;" onerror="this.onerror=null; this.src='https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png';"></a>` : ''}
+            <div style="padding: 24px;">
+                <h3 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.4;">
+                    <a href="${item.link}" target="_blank" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
+                </h3>
+                ${item.description ? `<p style="margin: 0 0 20px 0; font-size: 15px; color: #475569; line-height: 1.6;">${escapeHtml(item.description)}</p>` : ''}
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 8px;">
+                    <tr>
+                        <td align="left" valign="middle" style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                            ${escapeHtml(item.source)}
+                        </td>
+                        <td align="right" valign="middle">
+                            <a href="${item.link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">Ler mais</a>
+                        </td>
+                    </tr>
+                </table>
+            </div>
         </div>
     `;
 
     return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #000000;">
-        <!-- Banner Header -->
-        <div style="text-align: center; padding: 20px;">
-            <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png" alt="Newsletter Banner" style="max-width: 100%; height: auto; border-radius: 8px;">
-        </div>
+    <div style="background-color: #f8fafc; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+            
+            <!-- Banner Header -->
+            <div style="background-color: #1e293b; text-align: center;">
+                <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png" alt="Newsletter Banner" style="width: 100%; max-width: 600px; height: auto; display: block;">
+            </div>
 
-        <div style="padding: 30px;">
-            <h2 style="color: #000000; text-align: center; margin-top: 0;">${topic === 'financas' ? 'Sua Dose Diária de Finanças' : 'Sua Dose Diária de Tecnologia'}</h2>
-            <p style="text-align: center; color: #000000; margin-bottom: 30px;">Aqui estão as 9 notícias mais quentes de hoje, diretamente do Brasil.</p>
+            <div style="padding: 40px 30px; background-color: #f8fafc;">
+                <h2 style="color: #0f172a; text-align: center; margin-top: 0; margin-bottom: 8px; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">${topic === 'financas' ? 'Sua Dose de Finanças' : 'Sua Dose de Tecnologia'}</h2>
+                <p style="text-align: center; color: #64748b; margin-bottom: 40px; font-size: 16px;">Aqui estão as notícias mais quentes de hoje, curadas para você.</p>
 
-            <h2 style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; color: #000000;">Notícias do Brasil</h2>
-            ${newsBR.map(renderNewsItem).join('')}
-        </div>
-
-        <div style="padding: 20px; text-align: center; font-size: 12px; color: #000000;">
-            <p>Enviado por ${FROM_EMAIL}</p>
-            <p>© ${new Date().getFullYear()} Tech & Development Newsletter. Todos os direitos reservados.</p>
+                ${newsBR.map(renderNewsItem).join('')}
+            </div>
+            
+            <div style="background-color: #ffffff; padding: 30px 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="margin: 0 0 10px 0; font-size: 14px; color: #64748b;">Enviado com ❤️ por <strong>${FROM_EMAIL}</strong></p>
+                <p style="margin: 0; font-size: 12px; color: #94a3b8;">© ${new Date().getFullYear()} Tech & Development Newsletter. Todos os direitos reservados.</p>
+            </div>
         </div>
     </div>
     `;
