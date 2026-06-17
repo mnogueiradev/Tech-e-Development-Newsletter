@@ -113,6 +113,7 @@ async function runNewsCollection(pool) {
                     item.language = source.language;
                     item.publication_date = item.isoDate || item.pubDate;
                     item.author = item.creator || item.author;
+                    item.original_link = item.link || item.original_link;
 
                     const result = await processAndSaveItem(newsRepo, item, recentNewsList);
                     

@@ -38,7 +38,8 @@ class ValidationService {
         }
 
         // Criar o fingerprint misturando título e link
-        const hashContent = `${cleanTitle}|${rawData.original_link}`;
+        const linkStr = rawData.original_link || rawData.link;
+        const hashContent = `${cleanTitle}|${linkStr}`;
         const content_hash = this.generateHash(hashContent);
 
         return {
@@ -47,7 +48,7 @@ class ValidationService {
             slug: slug.substring(0, 500),
             description: cleanDescription,
             full_content: rawData.full_content ? rawData.full_content.trim() : null,
-            original_link: rawData.original_link ? rawData.original_link.trim().substring(0, 700) : null,
+            original_link: (rawData.original_link || rawData.link) ? (rawData.original_link || rawData.link).trim().substring(0, 700) : null,
             category: rawData.category || 'geral',
             tags: [], // array futuro
             main_image: rawData.main_image ? rawData.main_image.substring(0, 500) : null,

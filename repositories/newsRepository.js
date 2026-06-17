@@ -86,8 +86,7 @@ class NewsRepository {
                  WHERE n.publication_date >= NOW() - INTERVAL 48 HOUR 
                  AND n.status != 'rejeitada'
                  ORDER BY n.score DESC, n.publication_date DESC 
-                 LIMIT ?`,
-                [limitNum]
+                 LIMIT ${limitNum}`
             );
             console.log(`[NewsRepo] Top News encontradas: ${rows.length}`);
             
