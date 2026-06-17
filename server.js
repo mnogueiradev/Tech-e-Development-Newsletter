@@ -406,6 +406,47 @@ app.patch('/api/admin/news/:id/notes', verifyAdmin, async (req, res) => {
 });
 
 // ========================
+// UNSUBSCRIBE ROUTES
+// ========================
+
+app.get('/api/unsubscribe', async (req, res) => {
+    try {
+        const { token } = req.query;
+        if (!token) return res.status(400).send('<h1>Link inv&aacute;lido ou expirado.</h1>');
+
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const email = decoded.email;
+
+        await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
+
+        res.send(`
+            <div style="font-family: sans-serif; max-width: 600px; margin: 40px auto; text-align: center; padding: 20px;">
+                <h1 style="color: #333;">Inscri&ccedil;&atilde;o cancelada</h1>
+                <p style="color: #666; font-size: 16px;">Voc&ecirc; n&atilde;o receber&aacute; mais nossos e-mails no endere&ccedil;o <strong>${email}</strong>.</p>
+            </div>
+        `);
+    } catch (err) {
+        res.status(400).send('<h1>Link inv&aacute;lido ou expirado.</h1>');
+    }
+});
+
+app.post('/api/unsubscribe', async (req, res) => {
+    try {
+        const token = req.query.token || req.body.token;
+        if (!token) return res.status(400).send('Token missing');
+
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const email = decoded.email;
+
+        await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
+        
+        res.status(200).send('Unsubscribed');
+    } catch (err) {
+        res.status(400).send('Invalid token');
+    }
+});
+
+// ========================
 // ADMIN SELECTION ENGINE
 // ========================
 
@@ -535,6 +576,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
             
             <div style="background-color: #ffffff; padding: 30px 20px; text-align: center; border-top: 1px solid #e2e8f0;">
                 <p style="margin: 0 0 10px 0; font-size: 14px; color: #64748b;">Enviado com ❤️ por <strong>${FROM_EMAIL}</strong></p>
+                <p style="margin: 0 0 10px 0; font-size: 13px; color: #64748b;">Deseja parar de receber nossos e-mails? <a href="{{UNSUBSCRIBE_URL}}" style="color: #2563eb; text-decoration: underline;">Cancele sua inscri&ccedil;&atilde;o aqui</a>.</p>
                 <p style="margin: 0; font-size: 12px; color: #94a3b8;">© ${new Date().getFullYear()} Tech & Development Newsletter. Todos os direitos reservados.</p>
             </div>
         </div>
@@ -618,12 +660,22 @@ async function processAndSendNewsletter(tz = null) {
 
             // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
             console.log('Enviando newsletters com FROM=', FROM_EMAIL);
+            const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
+            
             const sendPromises = emails.map(email => {
+                const token = jwt.sign({ email }, JWT_SECRET);
+                const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${token}`;
+                const userHtmlContent = htmlContent.replace('{{UNSUBSCRIBE_URL}}', userUnsubscribeUrl);
+
                 return resend.emails.send({
                     from: FROM_EMAIL,
                     to: email,
                     subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
-                    html: htmlContent
+                    html: userHtmlContent,
+                    headers: {
+                        'List-Unsubscribe': `<${userUnsubscribeUrl}>`,
+                        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+                    }
                 });
             });
 
@@ -663,12 +715,21 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 
         const htmlContent = buildEmailHtml(newsBR, topic);
 
+        const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
+        const token = jwt.sign({ email }, JWT_SECRET);
+        const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${token}`;
+        const userHtmlContent = htmlContent.replace('{{UNSUBSCRIBE_URL}}', userUnsubscribeUrl);
+
         // Envia email usando Resend
         const sendResult = await resend.emails.send({
             from: FROM_EMAIL,
             to: email,
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
-            html: htmlContent
+            html: userHtmlContent,
+            headers: {
+                'List-Unsubscribe': `<${userUnsubscribeUrl}>`,
+                'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+            }
         });
 
         console.log('Resend sendWelcome response:', sendResult);
