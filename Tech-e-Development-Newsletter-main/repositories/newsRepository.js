@@ -7,7 +7,7 @@ class NewsRepository {
         try {
             const [rows] = await this.pool.execute(
                 'SELECT id FROM news_v2 WHERE original_link = ? OR content_hash = ?',
-                [link, hash || null] // If hash is undefined, fallback to null
+                [link, hash || null]
             );
             return rows.length > 0;
         } catch (error) {
@@ -73,10 +73,10 @@ class NewsRepository {
     async getTopNews(limit = 10) {
         try {
             console.log(`[NewsRepo] Buscando Top News. Limite: ${limit}`);
-            const limitNum = Number(limit);
+            let limitNum = Number(limit);
             if (isNaN(limitNum) || limitNum <= 0) {
                 console.warn(`[NewsRepo] Limite inválido: ${limit}. Usando padrão 10.`);
-                limit = 10;
+                limitNum = 10;
             }
             const [rows] = await this.pool.execute(
                 `SELECT n.id, n.title, n.description, s.name as source_name, n.original_link, n.score, 
@@ -86,12 +86,10 @@ class NewsRepository {
                  WHERE n.publication_date >= NOW() - INTERVAL 48 HOUR 
                  AND n.status != 'rejeitada'
                  ORDER BY n.score DESC, n.publication_date DESC 
-                 LIMIT ?`,
-                [limitNum]
+                 LIMIT ${limitNum}`
             );
             console.log(`[NewsRepo] Top News encontradas: ${rows.length}`);
             
-            // Garantir que cada notícia tem um source_name, mesmo se NULL no DB
             return rows.map(row => ({
                 ...row,
                 source_name: row.source_name || 'Fonte Desconhecida'
