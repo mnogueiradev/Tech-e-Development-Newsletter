@@ -28,6 +28,7 @@ app.use(cors({
   methods: ["GET", "POST"],
 }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
 
 // Backend atua apenas como API. Não serve arquivos estáticos HTML.
@@ -425,28 +426,30 @@ app.get('/api/unsubscribe', async (req, res) => {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>Cancelar Inscrição</title>
+                <title>Cancelar Inscrição - Tech & Development Newsletter</title>
                 <style>
                     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-                    .card { background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 40px 30px; max-width: 400px; text-align: center; }
-                    h1 { color: #0f172a; font-size: 24px; margin-top: 0; }
-                    p { color: #475569; font-size: 16px; margin-bottom: 30px; line-height: 1.5; }
-                    .btn { background-color: #dc2626; color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; width: 100%; box-sizing: border-box; }
+                    .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 420px; text-align: center; }
+                    .logo { max-width: 120px; height: auto; margin-bottom: 24px; border-radius: 50%; border: 4px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+                    h1 { color: #0f172a; font-size: 24px; margin-top: 0; font-weight: 800; letter-spacing: -0.5px; }
+                    p { color: #475569; font-size: 16px; margin-bottom: 30px; line-height: 1.6; }
+                    .btn { background-color: #dc2626; color: white; border: none; padding: 14px 24px; font-size: 16px; font-weight: bold; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; width: 100%; box-sizing: border-box; transition: background-color 0.2s; }
                     .btn:hover { background-color: #b91c1c; }
-                    .cancel-link { display: block; margin-top: 15px; color: #64748b; text-decoration: none; font-size: 14px; }
+                    .cancel-link { display: block; margin-top: 20px; color: #64748b; text-decoration: none; font-size: 15px; font-weight: 500; transition: color 0.2s; }
                     .cancel-link:hover { text-decoration: underline; color: #0f172a; }
                 </style>
             </head>
             <body>
                 <div class="card">
-                    <h1>Cancelar Inscrição</h1>
-                    <p>Tem certeza que deseja parar de receber a nossa newsletter no e-mail <strong>${email}</strong>?</p>
+                    <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Tech & Dev Logo" class="logo">
+                    <h1>Que pena ver você partir...</h1>
+                    <p>Tem certeza que deseja cancelar sua inscrição e parar de receber nossa curadoria de notícias no e-mail <strong>${email}</strong>?</p>
                     <form action="/api/unsubscribe" method="POST">
                         <input type="hidden" name="token" value="${token}">
                         <input type="hidden" name="source" value="web">
-                        <button type="submit" class="btn">Sim, quero cancelar</button>
+                        <button type="submit" class="btn">Sim, cancelar minha inscrição</button>
                     </form>
-                    <a href="https://techndevn.com" class="cancel-link">Não, quero continuar recebendo</a>
+                    <a href="https://techndevn.com" class="cancel-link">Não, mudei de ideia!</a>
                 </div>
             </body>
             </html>
@@ -458,8 +461,8 @@ app.get('/api/unsubscribe', async (req, res) => {
 
 app.post('/api/unsubscribe', async (req, res) => {
     try {
-        const token = req.query.token || req.body.token;
-        const source = req.body.source; // Identifica se veio do formulário web
+        const token = req.query.token || (req.body && req.body.token);
+        const source = req.body && req.body.source; // Identifica se veio do formulário web
         if (!token) return res.status(400).send('Token missing');
 
         const decoded = jwt.verify(token, JWT_SECRET);
@@ -474,18 +477,24 @@ app.post('/api/unsubscribe', async (req, res) => {
                 <html>
                 <head>
                     <meta charset="utf-8">
-                    <title>Inscrição Cancelada</title>
+                    <title>Inscrição Cancelada - Tech & Development Newsletter</title>
                     <style>
-                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-                        .card { background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 40px 30px; max-width: 400px; text-align: center; }
-                        h1 { color: #16a34a; font-size: 24px; margin-top: 0; }
-                        p { color: #475569; font-size: 16px; margin-bottom: 0; line-height: 1.5; }
+                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+                        .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 420px; text-align: center; }
+                        .logo { max-width: 120px; height: auto; margin-bottom: 24px; border-radius: 50%; filter: grayscale(100%); opacity: 0.7; }
+                        h1 { color: #0f172a; font-size: 24px; margin-top: 0; font-weight: 800; letter-spacing: -0.5px; }
+                        p { color: #475569; font-size: 16px; margin-bottom: 30px; line-height: 1.6; }
+                        .btn { background-color: #2563eb; color: white; border: none; padding: 14px 24px; font-size: 16px; font-weight: bold; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; box-sizing: border-box; transition: background-color 0.2s; }
+                        .btn:hover { background-color: #1d4ed8; }
                     </style>
                 </head>
                 <body>
                     <div class="card">
+                        <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Tech & Dev Logo" class="logo">
                         <h1>Inscrição Cancelada</h1>
-                        <p>Você não receberá mais nossos e-mails no endereço <strong>${email}</strong>. Foi bom ter você com a gente!</p>
+                        <p>Você não receberá mais e-mails no endereço <strong>${email}</strong>.</p>
+                        <p style="font-size: 14px; color: #64748b;">Foi muito bom ter você com a gente. As portas estarão sempre abertas caso decida voltar!</p>
+                        <a href="https://techndevn.com" class="btn">Voltar para o site</a>
                     </div>
                 </body>
                 </html>
@@ -495,7 +504,7 @@ app.post('/api/unsubscribe', async (req, res) => {
         // Se veio do botão nativo do Gmail (One-Click), exige apenas HTTP 200 silencioso
         res.status(200).send('Unsubscribed');
     } catch (err) {
-        if (req.body.source === 'web') {
+        if (req.body && req.body.source === 'web') {
             return res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif;"><h1>Erro ao cancelar: link inválido ou expirado.</h1></div>');
         }
         res.status(400).send('Invalid token');
