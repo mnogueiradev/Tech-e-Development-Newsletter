@@ -109,7 +109,7 @@ async function safeExecute(query, params, retries = 3) {
 }
 
 // ========================
-// 📧 EMAIL (Resend apenas)
+// 📧 EMAIL (Sender.net)
 // =====================
 
 // ========================
@@ -160,7 +160,7 @@ app.post('/subscribe', subscribeLimiter, async (req, res) => {
             // Se falhou ao enviar o email, deletamos do banco para não ficar "preso"
             await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
             return res.status(500).json({
-                error: "Falha ao enviar email de confirmação. O Resend pode ter bloqueado (verifique os logs ou se usou um email não autorizado no sandbox)."
+                error: "Falha ao enviar email de confirmação. Verifique os logs ou se o e-mail remetente está autorizado no Sender.net."
             });
         }
 

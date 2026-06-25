@@ -4,7 +4,7 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
 const path = require('path');
-const { Resend } = require('resend');
+// require removido para evitar erro de sintaxe.
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
@@ -16,7 +16,7 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const resend = new Resend(process.env.RESEND_API_KEY);
+const Sender.net = new Sender.net(process.env.Sender.net_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || 'newsletter@techndevn.com';
 
 app.use(helmet({
@@ -109,7 +109,7 @@ async function safeExecute(query, params, retries = 3) {
 }
 
 // ========================
-// 📧 EMAIL (Resend apenas)
+// 📧 EMAIL (Sender.net apenas)
 // =====================
 
 // ========================
@@ -160,7 +160,7 @@ app.post('/subscribe', subscribeLimiter, async (req, res) => {
             // Se falhou ao enviar o email, deletamos do banco para não ficar "preso"
             await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
             return res.status(500).json({
-                error: "Falha ao enviar email de confirmação. O Resend pode ter bloqueado (verifique os logs ou se usou um email não autorizado no sandbox)."
+                error: "Falha ao enviar email de confirmação. O Sender.net pode ter bloqueado (verifique os logs ou se usou um email não autorizado no sandbox)."
             });
         }
 
@@ -734,7 +734,7 @@ async function processAndSendNewsletter(tz = null) {
             // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
             console.log('Enviando newsletters com FROM=', FROM_EMAIL);
             const sendPromises = emails.map(email => {
-                return resend.emails.send({
+                return Sender.net.emails.send({
                     from: FROM_EMAIL,
                     to: email,
                     subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
@@ -791,23 +791,23 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
 
         const htmlContent = buildEmailHtml(newsBR, topic);
 
-        // Envia email usando Resend
-        const sendResult = await resend.emails.send({
+        // Envia email usando Sender.net
+        const sendResult = await Sender.net.emails.send({
             from: FROM_EMAIL,
             to: email,
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
             html: htmlContent
         });
 
-        console.log('Resend sendWelcome response:', sendResult);
+        console.log('Sender.net sendWelcome response:', sendResult);
 
         if (sendResult.error) {
-            console.error("❌ Erro ao enviar email via Resend:", sendResult.error);
+            console.error("❌ Erro ao enviar email via Sender.net:", sendResult.error);
             return false;
         }
 
         if (sendResult && (sendResult.id || sendResult.messageId)) {
-            console.log("✅ Email enviado via Resend:", sendResult.id || sendResult.messageId);
+            console.log("✅ Email enviado via Sender.net:", sendResult.id || sendResult.messageId);
         }
         return true;
 
