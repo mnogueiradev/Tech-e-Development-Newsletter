@@ -4,7 +4,7 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
 const path = require('path');
-const { Resend } = require('resend');
+const { sendEmail } = require('./services/emailSender');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
@@ -16,7 +16,6 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || 'newsletter@techndevn.com';
 
 app.use(helmet({
@@ -732,15 +731,10 @@ async function processAndSendNewsletter(tz = null) {
                 const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${token}`;
                 const userHtmlContent = htmlContent.replace('{{UNSUBSCRIBE_URL}}', userUnsubscribeUrl);
 
-                return resend.emails.send({
-                    from: FROM_EMAIL,
+                return sendEmail({
                     to: email,
                     subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
-                    html: userHtmlContent,
-                    headers: {
-                        'List-Unsubscribe': `<${userUnsubscribeUrl}>`,
-                        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
-                    }
+                    html: userHtmlContent
                 });
             });
 
@@ -748,14 +742,14 @@ async function processAndSendNewsletter(tz = null) {
 
             results.forEach((r, i) => {
                 const toEmail = emails[i];
-                if (r.status === 'fulfilled') {
-                    console.log(`Enviado para ${toEmail}:`, r.value);
+                if (r.status === 'fulfilled' && r.value.success) {
+                    console.log(`Enviado para ${toEmail} com ID: ${r.value.id}`);
                 } else {
-                    console.error(`Falha ao enviar para ${toEmail}:`, r.reason || r);
+                    console.error(`Falha ao enviar para ${toEmail}:`, r.reason || (r.value && r.value.error) || 'Erro desconhecido');
                 }
             });
 
-            const failed = results.filter(r => r.status === 'rejected' || (r.value && r.value.error));
+            const failed = results.filter(r => r.status === 'rejected' || (r.value && !r.value.success));
             if (failed.length > 0) {
                 console.error(`Erro ao enviar newsletter '${topic}' para ${failed.length} inscritos.`);
             } else {
@@ -785,29 +779,18 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${token}`;
         const userHtmlContent = htmlContent.replace('{{UNSUBSCRIBE_URL}}', userUnsubscribeUrl);
 
-        // Envia email usando Resend
-        const sendResult = await resend.emails.send({
-            from: FROM_EMAIL,
+        // Envia email usando Sender.net
+        const sendResult = await sendEmail({
             to: email,
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
-            html: userHtmlContent,
-            headers: {
-                'List-Unsubscribe': `<${userUnsubscribeUrl}>`,
-                'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
-            }
+            html: userHtmlContent
         });
 
-        console.log('Resend sendWelcome response:', sendResult);
-
-        if (sendResult.error) {
-            console.error("❌ Erro ao enviar email via Resend:", sendResult.error);
+        if (!sendResult.success) {
+            console.error("❌ Erro ao enviar email de boas-vindas:", sendResult.error);
             return false;
         }
 
-        // Log id if available
-        if (sendResult && (sendResult.id || sendResult.messageId)) {
-            console.log("✅ Email enviado via Resend:", sendResult.id || sendResult.messageId);
-        }
         return true;
 
     } catch (error) {

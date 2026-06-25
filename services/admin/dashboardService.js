@@ -108,7 +108,7 @@ class DashboardService {
 
             // Status Operacional
             const braveOk = !!process.env.BRAVE_API_KEY && process.env.BRAVE_API_KEY !== 'COLOQUE_SUA_CHAVE_AQUI';
-            const resendOk = !!process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 'COLOQUE_SUA_CHAVE_AQUI';
+            const senderOk = !!process.env.SENDER_API_KEY && process.env.SENDER_API_KEY !== 'COLOQUE_SUA_CHAVE_AQUI';
 
             return {
                 systemStatus: {
@@ -130,7 +130,7 @@ class DashboardService {
                 operationalStatus: {
                     server: true,
                     brave_api: braveOk,
-                    resend: resendOk,
+                    sender: senderOk,
                     db: dbConnected,
                     auth: true
                 }

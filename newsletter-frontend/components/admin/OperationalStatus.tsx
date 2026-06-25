@@ -3,7 +3,7 @@ import { Server, Database, Mail, Globe, ShieldCheck } from "lucide-react";
 interface StatusProps {
   server: boolean;
   brave_api: boolean;
-  resend: boolean;
+  sender: boolean;
   db: boolean;
   auth: boolean;
 }
@@ -13,7 +13,7 @@ export function OperationalStatus({ status }: { status: StatusProps }) {
     { name: "Servidor (Node.js)", ok: status.server, icon: Server },
     { name: "Banco TiDB", ok: status.db, icon: Database },
     { name: "API Brave News", ok: status.brave_api, icon: Globe },
-    { name: "Resend (Email)", ok: status.resend, icon: Mail },
+    { name: "Sender.net (Email)", ok: status.sender, icon: Mail },
     { name: "Autenticação", ok: status.auth, icon: ShieldCheck },
   ];
 
