@@ -17,6 +17,7 @@ async function sendEmail({ to, subject, html }) {
         console.error("❌ Erro: SENDER_API_KEY não configurada.");
         return { success: false, error: "Missing API Key" };
     }
+    console.log('📧 to recebido:', to, 'Tipo:', typeof to);
 
     const payload = {
         from: {
