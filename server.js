@@ -109,7 +109,7 @@ async function safeExecute(query, params, retries = 3) {
 }
 
 // ========================
-// 📧 EMAIL (Sender.net)
+// 📧 EMAIL (Resend)
 // =====================
 
 // ========================
@@ -160,7 +160,7 @@ app.post('/subscribe', subscribeLimiter, async (req, res) => {
             // Se falhou ao enviar o email, deletamos do banco para não ficar "preso"
             await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
             return res.status(500).json({
-                error: "Falha ao enviar email de confirmação. Verifique os logs ou se o e-mail remetente está autorizado no Sender.net."
+                error: "Falha ao enviar email de confirmação. Verifique os logs ou se o e-mail remetente está autorizado no Resend."
             });
         }
 
@@ -779,7 +779,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${token}`;
         const userHtmlContent = htmlContent.replace('{{UNSUBSCRIBE_URL}}', userUnsubscribeUrl);
 
-        // Envia email usando Sender.net
+        // Envia email usando Resend
         const sendResult = await sendEmail({
             to: email,
             subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',

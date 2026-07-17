@@ -1,7 +1,7 @@
-const SENDER_API_URL = 'https://api.sender.net/v2/message/send';
+const RESEND_API_URL = 'https://api.resend.com/emails';
 
 /**
- * Envia um e-mail utilizando a API da Sender.net
+ * Envia um e-mail utilizando a API do Resend
  * @param {Object} params
  * @param {string} params.to E-mail do destinatário
  * @param {string} params.subject Assunto do e-mail
@@ -11,33 +11,27 @@ const SENDER_API_URL = 'https://api.sender.net/v2/message/send';
 async function sendEmail({ to, subject, html }) {
     const FROM_EMAIL = process.env.FROM_EMAIL || 'newsletter@techndevn.com';
     const FROM_NAME = 'Tech & Dev Newsletter';
-    const SENDER_API_KEY = process.env.SENDER_API_KEY;
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
-    if (!SENDER_API_KEY) {
-        console.error("❌ Erro: SENDER_API_KEY não configurada.");
+    if (!RESEND_API_KEY) {
+        console.error("❌ Erro: RESEND_API_KEY não configurada.");
         return { success: false, error: "Missing API Key" };
     }
     console.log('📧 to recebido:', to, 'Tipo:', typeof to);
 
     const payload = {
-        from: {
-            email: FROM_EMAIL,
-            name: FROM_NAME
-        },
-        to: [
-            { email: to }
-        ],
+        from: `${FROM_NAME} <${FROM_EMAIL}>`,
+        to: [to],
         subject: subject,
         html: html
     };
 
     try {
-        const response = await fetch(SENDER_API_URL, {
+        const response = await fetch(RESEND_API_URL, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${SENDER_API_KEY}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Authorization': `Bearer ${RESEND_API_KEY}`,
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(payload)
         });
@@ -45,14 +39,14 @@ async function sendEmail({ to, subject, html }) {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            console.error(`❌ Erro da API do Sender (${response.status}):`, data);
+            console.error(`❌ Erro da API do Resend (${response.status}):`, data);
             return { success: false, error: data.message || `HTTP ${response.status}` };
         }
 
-        console.log(`✅ Email enviado via Sender para: ${to}`);
-        return { success: true, id: data.message_id || 'dispatched' };
+        console.log(`✅ Email enviado via Resend para: ${to}`);
+        return { success: true, id: data.id || 'dispatched' };
     } catch (error) {
-        console.error("❌ Falha de rede/timeout ao enviar via Sender:", error.message);
+        console.error("❌ Falha de rede/timeout ao enviar via Resend:", error.message);
         return { success: false, error: error.message };
     }
 }
