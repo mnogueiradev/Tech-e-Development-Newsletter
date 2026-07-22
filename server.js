@@ -832,6 +832,11 @@ async function loadSchedules() {
 // =======================
 // Servir o Frontend construído (apenas no Render/Produção)
 const frontendPath = path.join(__dirname, 'newsletter-frontend', 'out');
+const publicFrontendPath = path.join(__dirname, 'frontend', 'dist');
+
+// Serve novo frontend primeiro (para homepage, assets, etc)
+app.use(express.static(publicFrontendPath, { extensions: ['html'] }));
+// Serve o antigo frontend como fallback (para assets do admin)
 app.use(express.static(frontendPath, { extensions: ['html'] }));
 
 // Rotas explícitas para garantir que pastas/subpastas com barra final não caiam no fallback SPA errado
@@ -850,7 +855,9 @@ app.get(/.*/, (req, res, next) => {
         return next();
     }
     
-    if (require('fs').existsSync(path.join(frontendPath, 'index.html'))) {
+    if (require('fs').existsSync(path.join(publicFrontendPath, 'index.html'))) {
+        res.sendFile(path.join(publicFrontendPath, 'index.html'));
+    } else if (require('fs').existsSync(path.join(frontendPath, 'index.html'))) {
         res.sendFile(path.join(frontendPath, 'index.html'));
     } else {
         res.status(404).json({ error: 'Frontend não encontrado. Execute "npm run build" para gerar os arquivos da interface.' });
