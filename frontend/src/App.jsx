@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
 import Editions from './pages/Editions';
 import EditionDetail from './pages/EditionDetail';
+import CategoryDetail from './pages/CategoryDetail';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/edicoes" element={<Editions />} />
         <Route path="/edicoes/:slug" element={<EditionDetail />} />
+        <Route path="/categoria/:slug" element={<CategoryDetail />} />
       </Routes>
     </>
   );

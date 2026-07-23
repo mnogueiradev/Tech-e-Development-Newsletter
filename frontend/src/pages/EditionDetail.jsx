@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Clock, ExternalLink } from 'lucide-react';
 import api from '../services/api';
 import Footer from '../components/Footer';
+import { getCategorySlug } from '../utils/categoryMap';
 
 export default function EditionDetail() {
   const { slug } = useParams();
@@ -67,6 +68,34 @@ export default function EditionDetail() {
         <meta property="og:description" content={edition.description} />
         {/* Usando o banner padrão como fallback */}
         <meta property="og:image" content="https://techndevn.com/og-image.jpg" />
+        
+        {/* JSON-LD for NewsArticle */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "NewsArticle",
+            "headline": edition.title,
+            "image": [
+              "https://techndevn.com/og-image.jpg"
+            ],
+            "datePublished": new Date(edition.edition_date).toISOString(),
+            "dateModified": new Date(edition.edition_date).toISOString(),
+            "author": [{
+                "@type": "Organization",
+                "name": "Tech & Development Newsletter",
+                "url": "https://techndevn.com/"
+            }],
+            "publisher": {
+                "@type": "Organization",
+                "name": "Tech & Development Newsletter",
+                "logo": {
+                    "@type": "ImageObject",
+                    "url": "https://techndevn.com/logo.png"
+                }
+            },
+            "description": edition.description
+          })}
+        </script>
       </Helmet>
 
       {/* Header */}
@@ -123,9 +152,18 @@ export default function EditionDetail() {
               
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-brand-accent bg-[#1A1D24] px-3 py-1 rounded">
-                    {item.category || 'Tecnologia'}
-                  </span>
+                  {getCategorySlug(item.category) ? (
+                    <Link 
+                      to={`/categoria/${getCategorySlug(item.category)}`}
+                      className="text-xs font-bold uppercase tracking-wider text-brand-accent bg-[#1A1D24] px-3 py-1 rounded hover:underline hover:bg-brand-border transition-colors"
+                    >
+                      {item.category}
+                    </Link>
+                  ) : (
+                    <span className="text-xs font-bold uppercase tracking-wider text-brand-accent bg-[#1A1D24] px-3 py-1 rounded">
+                      {item.category || 'Tecnologia'}
+                    </span>
+                  )}
                   <span className="text-brand-muted text-sm font-medium">
                     {item.source_name || 'Fonte desconhecida'}
                   </span>
@@ -145,6 +183,7 @@ export default function EditionDetail() {
                     <img 
                       src={item.main_image} 
                       alt={item.title} 
+                      loading="lazy"
                       className="w-full h-64 sm:h-96 object-cover rounded-md border border-brand-border opacity-90 hover:opacity-100 transition-opacity"
                       onError={(e) => {
                         e.target.style.display = 'none';
