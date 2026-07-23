@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import NewsCard from './NewsCard';
 import api from '../services/api';
 
@@ -69,9 +70,9 @@ export default function TodayEdition() {
             ))}
           </div>
           <div className="mt-12 text-center">
-            <button className="inline-flex items-center justify-center px-8 py-3 border border-brand-border rounded text-sm font-semibold text-white bg-brand-card hover:bg-[#1A1D24] hover:border-brand-muted transition-colors cursor-pointer">
+            <Link to={`/edicoes/${edition.date}`} className="inline-flex items-center justify-center px-8 py-3 border border-brand-border rounded text-sm font-semibold text-white bg-brand-card hover:bg-[#1A1D24] hover:border-brand-muted transition-colors cursor-pointer">
               Ler edição completa online
-            </button>
+            </Link>
           </div>
         </>
       ) : (
