@@ -471,7 +471,95 @@ app.get('/api/public/editions/:slug', async (req, res) => {
         res.json({ edition, items });
     } catch (err) {
         console.error("Erro no /api/public/editions/:slug:", err);
-        res.status(500).json({ error: 'Erro ao buscar detalhes da edição.' });
+        res.status(500).json({ error: 'Erro ao buscar edição.' });
+    }
+});
+
+// ========================
+// PUBLIC ROUTES (Categorias)
+// ========================
+app.get('/api/public/categories', async (req, res) => {
+    try {
+        const CategoryRepository = require('./repositories/categoryRepository');
+        const catRepo = new CategoryRepository(pool);
+        const categories = await catRepo.getCategoriesWithStats();
+        res.json(categories);
+    } catch (err) {
+        console.error("Erro no /api/public/categories:", err);
+        res.status(500).json({ error: 'Erro ao buscar categorias.' });
+    }
+});
+
+app.get('/api/public/categories/:slug', async (req, res) => {
+    try {
+        const CategoryRepository = require('./repositories/categoryRepository');
+        const catRepo = new CategoryRepository(pool);
+        
+        const categoryMeta = catRepo.getCategoryBySlug(req.params.slug);
+        if (!categoryMeta) {
+            return res.status(404).json({ error: 'Categoria não encontrada.' });
+        }
+        
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        
+        const result = await catRepo.getNewsByCategory(req.params.slug, page, limit);
+        
+        res.json({
+            category: categoryMeta,
+            news: result.data,
+            pagination: result.pagination
+        });
+    } catch (err) {
+        console.error("Erro no /api/public/categories/:slug:", err);
+        res.status(500).json({ error: 'Erro ao buscar notícias da categoria.' });
+    }
+});
+
+// ========================
+// SEO ROUTES (Sitemap e Robots)
+// ========================
+app.get('/robots.txt', (req, res) => {
+    const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
+    const content = `User-agent: *\nAllow: /\n\nSitemap: ${PUBLIC_URL}/sitemap.xml\n`;
+    res.header('Content-Type', 'text/plain');
+    res.send(content);
+});
+
+app.get('/sitemap.xml', async (req, res) => {
+    try {
+        const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
+        
+        let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+        xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+        
+        // Static URLs
+        xml += `  <url>\n    <loc>${PUBLIC_URL}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+        xml += `  <url>\n    <loc>${PUBLIC_URL}/edicoes</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+        
+        // Categories
+        const CategoryRepository = require('./repositories/categoryRepository');
+        const catRepo = new CategoryRepository(pool);
+        const categories = catRepo.getAllCategories();
+        
+        for (const cat of categories) {
+            xml += `  <url>\n    <loc>${PUBLIC_URL}/categoria/${cat.slug}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+        }
+
+        // Dynamic Editions
+        const [editions] = await pool.query('SELECT slug, edition_date FROM editions ORDER BY edition_date DESC');
+        for (const ed of editions) {
+            const modDate = ed.edition_date instanceof Date ? ed.edition_date.toISOString().split('T')[0] : String(ed.edition_date).split('T')[0];
+            xml += `  <url>\n    <loc>${PUBLIC_URL}/edicoes/${ed.slug}</loc>\n    <lastmod>${modDate}</lastmod>\n    <changefreq>never</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
+        }
+        
+        xml += `</urlset>`;
+        
+        res.header('Content-Type', 'application/xml');
+        res.send(xml);
+    } catch (error) {
+        console.error('Error generating sitemap:', error);
+        res.status(500).end();
     }
 });
 
