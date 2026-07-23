@@ -406,6 +406,76 @@ app.patch('/api/admin/news/:id/notes', verifyAdmin, async (req, res) => {
 });
 
 // ========================
+// PUBLIC ROUTES (Edições)
+// ========================
+
+app.get('/api/public/today-edition', async (req, res) => {
+    try {
+        const SelectionRepository = require('./repositories/selectionRepository');
+        const selectionRepo = new SelectionRepository(pool);
+        const items = await selectionRepo.getTodaySelections();
+        const todayStr = new Date().toISOString().split('T')[0];
+        
+        let editionTitle = 'A Edição de Hoje';
+        
+        // Try to fetch real metadata
+        const [editions] = await pool.execute('SELECT * FROM editions WHERE edition_date = ?', [todayStr]);
+        if (editions.length > 0) {
+            editionTitle = editions[0].title;
+        }
+
+        res.json({
+            date: todayStr,
+            editionTitle,
+            items: items || []
+        });
+    } catch (err) {
+        console.error("Erro no /api/public/today-edition:", err);
+        res.status(500).json({ error: 'Erro ao buscar edição de hoje.' });
+    }
+});
+
+app.get('/api/public/editions', async (req, res) => {
+    try {
+        const [rows] = await pool.execute(`
+            SELECT e.*, COUNT(es.news_id) as newsCount 
+            FROM editions e 
+            LEFT JOIN edition_selections es ON e.edition_date = es.edition_date 
+            GROUP BY e.id 
+            ORDER BY e.edition_date DESC
+        `);
+        res.json(rows);
+    } catch (err) {
+        console.error("Erro no /api/public/editions:", err);
+        res.status(500).json({ error: 'Erro ao buscar lista de edições.' });
+    }
+});
+
+app.get('/api/public/editions/:slug', async (req, res) => {
+    try {
+        const [editions] = await pool.execute('SELECT * FROM editions WHERE slug = ?', [req.params.slug]);
+        if (editions.length === 0) return res.status(404).json({ error: 'Edição não encontrada.' });
+        
+        const edition = editions[0];
+        
+        const [items] = await pool.execute(`
+            SELECT n.id, n.title, n.description, s.name as source_name, n.original_link, 
+                   n.main_image, es.position, n.category, n.score
+            FROM edition_selections es
+            JOIN news_v2 n ON es.news_id = n.id
+            LEFT JOIN news_sources s ON n.source_id = s.id
+            WHERE es.edition_date = ?
+            ORDER BY es.position ASC
+        `, [edition.edition_date]);
+        
+        res.json({ edition, items });
+    } catch (err) {
+        console.error("Erro no /api/public/editions/:slug:", err);
+        res.status(500).json({ error: 'Erro ao buscar detalhes da edição.' });
+    }
+});
+
+// ========================
 // UNSUBSCRIBE ROUTES
 // ========================
 

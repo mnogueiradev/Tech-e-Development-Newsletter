@@ -90,6 +90,28 @@ async function initializeDatabase(pool) {
             )
         `);
 
+        // 4.1 Tabela de Edições (Metadados públicos para SEO e Arquivo)
+        await pool.execute(`
+            CREATE TABLE IF NOT EXISTS editions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                edition_date DATE UNIQUE NOT NULL,
+                slug VARCHAR(255) UNIQUE NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 4.2 Popula tabela de edições com dados legados se necessário
+        await pool.execute(`
+            INSERT IGNORE INTO editions (edition_date, slug, title, description)
+            SELECT DISTINCT edition_date, 
+                   DATE_FORMAT(edition_date, '%Y-%m-%d') as slug,
+                   CONCAT('Tech & Development Newsletter — Edição de ', DATE_FORMAT(edition_date, '%d/%m/%Y')) as title,
+                   'As principais notícias de tecnologia e desenvolvimento curadas pela nossa IA.' as description
+            FROM edition_selections
+        `);
+
         // 5. Migração das fontes Hardcoded para o Banco (Se a tabela estiver vazia)
         const [sources] = await pool.execute('SELECT COUNT(*) as count FROM news_sources');
         if (sources[0].count === 0) {
