@@ -18,7 +18,7 @@ export default function CategoryDetail() {
         const fetchCategory = async () => {
             try {
                 setLoading(true);
-                const response = await api.get(`/public/categories/${slug}`);
+                const response = await api.get(`/api/public/categories/${slug}`);
                 setCategory(response.data.category);
                 setNews(response.data.news);
                 setPagination(response.data.pagination);
