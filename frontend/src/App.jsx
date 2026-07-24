@@ -1,5 +1,5 @@
 import { Toaster } from 'react-hot-toast';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Home from './pages/Home';
 import Editions from './pages/Editions';
 import EditionDetail from './pages/EditionDetail';
@@ -28,7 +28,9 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/edicoes" element={<Editions />} />
         <Route path="/edicoes/:slug" element={<EditionDetail />} />
+        <Route path="/categoria" element={<Navigate to="/" replace />} />
         <Route path="/categoria/:slug" element={<CategoryDetail />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );
