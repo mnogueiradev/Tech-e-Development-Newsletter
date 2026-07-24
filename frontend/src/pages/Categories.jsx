@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
-import Navbar from '../components/layout/Navbar';
-import Footer from '../components/layout/Footer';
+import Footer from '../components/Footer';
 import api from '../services/api';
 import { FolderHeart, ShieldCheck, Code2, Server, Smartphone, BookOpen, Layers } from 'lucide-react';
 
@@ -41,9 +40,7 @@ export default function Categories() {
         <meta name="description" content="Explore nossas categorias de notícias sobre IA, Cibersegurança, Desenvolvimento, Infraestrutura e muito mais." />
       </Helmet>
 
-      <Navbar />
-
-      <main className="flex-grow pt-32 pb-24">
+      <main className="flex-grow pt-16 pb-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center mb-16">
