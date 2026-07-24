@@ -9,8 +9,24 @@ export const categorySlugMap = {
   'devops': 'devops', 'sre': 'devops', 'ci/cd': 'devops', 'infraestrutura': 'devops', 'observabilidade': 'devops'
 };
 
+export const categoryNames = {
+  'ia': 'Inteligência Artificial',
+  'ciberseguranca': 'Cibersegurança',
+  'desenvolvimento': 'Desenvolvimento',
+  'cloud': 'Cloud Computing',
+  'startups': 'Startups & Business',
+  'hardware': 'Hardware & Infra',
+  'mobile': 'Mobile',
+  'devops': 'DevOps & SRE'
+};
+
 export const getCategorySlug = (category) => {
     if (!category) return null;
     const key = category.toLowerCase().trim();
-    return categorySlugMap[key] || null;
+    return categorySlugMap[key] || 'desenvolvimento';
+};
+
+export const getCategoryName = (slug) => {
+    if (!slug) return 'Desenvolvimento';
+    return categoryNames[slug.toLowerCase()] || slug.toUpperCase();
 };
