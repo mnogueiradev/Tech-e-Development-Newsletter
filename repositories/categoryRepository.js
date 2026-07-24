@@ -84,19 +84,22 @@ class CategoryRepository {
             SELECT COUNT(*) as total 
             FROM news_v2 
             WHERE category IN (${placeholders}) 
-              AND content IS NOT NULL
-              AND translation_status = 'translated'
+              AND full_content IS NOT NULL
+              AND language = 'pt-BR'
+              AND status != 'rejeitada'
         `;
         
         // 2. Buscar as notícias
         const dataQuery = `
-            SELECT id, title, description, content, original_link, main_image, category, 
-                   published_at, source_name, editorial_score as score
-            FROM news_v2
-            WHERE category IN (${placeholders})
-              AND content IS NOT NULL
-              AND translation_status = 'translated'
-            ORDER BY editorial_score DESC, published_at DESC
+            SELECT n.id, n.title, n.description, n.full_content as content, n.original_link, n.main_image, n.category, 
+                   n.publication_date as published_at, s.name as source_name, n.score
+            FROM news_v2 n
+            LEFT JOIN news_sources s ON n.source_id = s.id
+            WHERE n.category IN (${placeholders})
+              AND n.full_content IS NOT NULL
+              AND n.language = 'pt-BR'
+              AND n.status != 'rejeitada'
+            ORDER BY n.score DESC, n.publication_date DESC
             LIMIT ? OFFSET ?
         `;
 
@@ -111,13 +114,15 @@ class CategoryRepository {
             
             // Usamos query no lugar de execute quando temos paginação com cast de params
             const [news] = await this.pool.query(
-                `SELECT id, title, description, content, original_link, main_image, category, 
-                   published_at, source_name, editorial_score as score
-                 FROM news_v2
-                 WHERE category IN (${placeholders})
-                   AND content IS NOT NULL
-                   AND translation_status = 'translated'
-                 ORDER BY published_at DESC, editorial_score DESC
+                `SELECT n.id, n.title, n.description, n.full_content as content, n.original_link, n.main_image, n.category, 
+                   n.publication_date as published_at, s.name as source_name, n.score
+                 FROM news_v2 n
+                 LEFT JOIN news_sources s ON n.source_id = s.id
+                 WHERE n.category IN (${placeholders})
+                   AND n.full_content IS NOT NULL
+                   AND n.language = 'pt-BR'
+                   AND n.status != 'rejeitada'
+                 ORDER BY n.score DESC, n.publication_date DESC
                  LIMIT ${Number(limit)} OFFSET ${Number(offset)}`, 
                 legacyKeys
             );
@@ -144,7 +149,7 @@ class CategoryRepository {
         for (const cat of this.canonicalCategories) {
             const placeholders = cat.legacyKeys.map(() => '?').join(',');
             const [rows] = await this.pool.query(
-                `SELECT COUNT(*) as count FROM news_v2 WHERE category IN (${placeholders}) AND translation_status = 'translated'`,
+                `SELECT COUNT(*) as count FROM news_v2 WHERE category IN (${placeholders}) AND language = 'pt-BR' AND status != 'rejeitada'`,
                 cat.legacyKeys
             );
             

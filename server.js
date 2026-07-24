@@ -511,8 +511,9 @@ app.get('/api/public/categories/:slug', async (req, res) => {
             pagination: result.pagination
         });
     } catch (err) {
-        console.error("Erro no /api/public/categories/:slug:", err);
-        res.status(500).json({ error: 'Erro ao buscar notícias da categoria.' });
+        console.error(`[API] Erro crítico no /api/public/categories/${req.params.slug}:`, err);
+        if (err.sqlMessage) console.error("[SQL Error]:", err.sqlMessage);
+        res.status(500).json({ error: 'Erro interno ao buscar notícias da categoria.', details: err.message });
     }
 });
 
