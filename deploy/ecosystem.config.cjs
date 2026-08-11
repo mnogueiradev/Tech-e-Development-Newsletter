@@ -2,10 +2,9 @@
  * PM2 — mantém o servidor Node rodando 24/7 na VM Oracle Cloud.
  *
  * Uso na VM:
- *   cd /opt/newsletter
+ *   cd /home/ubuntu/Tech-e-Development-Newsletter
  *   pm2 start deploy/ecosystem.config.cjs
  *   pm2 save
- *   pm2 startup   # seguir instruções exibidas
  */
 module.exports = {
   apps: [
@@ -19,8 +18,8 @@ module.exports = {
       max_memory_restart: "400M",
       env: {
         NODE_ENV: "production",
-        RESEND_API_KEY: "re_sua_chave_resend_aqui",
-        FROM_EMAIL: "newsletter@techndevn.com"
+        PORT: 3000,
+        FROM_EMAIL: "newsletter@techndevn.com",
       },
       error_file: "/var/log/newsletter/error.log",
       out_file: "/var/log/newsletter/out.log",

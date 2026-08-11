@@ -107,9 +107,12 @@ async function runNewsCollection(pool) {
             
             for (const item of items) {
                 try {
-                    // Injetando dados da fonte no item bruto
+                    // Classificação automática da notícia no ato da coleta
+                    const { classifyArticle } = require('./categoryClassifier');
+                    const detectedCategory = classifyArticle(item.title || '', item.description || '', item.categories || item.tags || [], source.category);
+
                     item.source_id = source.id;
-                    item.category = source.category;
+                    item.category = detectedCategory;
                     item.language = source.language;
                     item.publication_date = item.isoDate || item.pubDate;
                     item.author = item.creator || item.author;

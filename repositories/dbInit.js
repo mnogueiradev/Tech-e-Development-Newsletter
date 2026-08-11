@@ -117,17 +117,21 @@ async function initializeDatabase(pool) {
         if (sources[0].count === 0) {
             console.log('[DB INIT] Populando fontes de notícias padrão...');
             const defaultSources = [
-                { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', category: 'tecnologia', lang: 'en' },
-                { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', category: 'tecnologia', lang: 'en' },
-                { name: 'Wired', url: 'https://www.wired.com/feed/rss', category: 'tecnologia', lang: 'en' },
-                { name: 'Olhar Digital', url: 'https://olhardigital.com.br/rss', category: 'tecnologia', lang: 'pt-BR' },
-                { name: 'Canaltech', url: 'https://canaltech.com.br/rss', category: 'tecnologia', lang: 'pt-BR' },
-                { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'tecnologia', lang: 'en' }
+                { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', category: 'desenvolvimento', lang: 'en' },
+                { name: 'TechCrunch AI', url: 'https://techcrunch.com/category/artificial-intelligence/feed/', category: 'ia', lang: 'en' },
+                { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', category: 'desenvolvimento', lang: 'en' },
+                { name: 'Wired', url: 'https://www.wired.com/feed/rss', category: 'desenvolvimento', lang: 'en' },
+                { name: 'Olhar Digital', url: 'https://olhardigital.com.br/rss', category: 'desenvolvimento', lang: 'pt-BR' },
+                { name: 'Canaltech', url: 'https://canaltech.com.br/rss', category: 'desenvolvimento', lang: 'pt-BR' },
+                { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'desenvolvimento', lang: 'en' },
+                { name: 'Hacker News AI', url: 'https://hnrss.org/newest?q=AI+OR+LLM+OR+GPT+OR+OpenAI', category: 'ia', lang: 'en' },
+                { name: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/', category: 'ciberseguranca', lang: 'en' },
+                { name: 'AWS News Blog', url: 'https://aws.amazon.com/blogs/aws/feed/', category: 'cloud', lang: 'en' }
             ];
 
             for (const src of defaultSources) {
                 await pool.execute(
-                    'INSERT INTO news_sources (name, rss_url, category, language) VALUES (?, ?, ?, ?)',
+                    'INSERT IGNORE INTO news_sources (name, rss_url, category, language) VALUES (?, ?, ?, ?)',
                     [src.name, src.url, src.category, src.lang]
                 );
             }

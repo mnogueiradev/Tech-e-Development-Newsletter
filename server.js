@@ -86,6 +86,17 @@ async function initDB() {
         // Inicialização da parte de coleta de notícias (RSS)
         await initializeDatabase(pool);
         initNewsScheduler(pool);
+
+        // Reclassifica notícias legadas no banco para distribuir entre as 8 categorias canônicas
+        setTimeout(async () => {
+            try {
+                const CategoryRepository = require('./repositories/categoryRepository');
+                const catRepo = new CategoryRepository(pool);
+                await catRepo.reclassifyAllNewsInDB();
+            } catch (reclassErr) {
+                console.error('⚠️ Erro ao reclassificar notícias no boot:', reclassErr.message);
+            }
+        }, 3000);
     } catch (err) {
         console.error('❌ Erro no DB:', err.message);
         process.exit(1);
@@ -490,6 +501,18 @@ app.get('/api/public/categories', async (req, res) => {
     }
 });
 
+app.post('/api/public/categories/reclassify', async (req, res) => {
+    try {
+        const CategoryRepository = require('./repositories/categoryRepository');
+        const catRepo = new CategoryRepository(pool);
+        const result = await catRepo.reclassifyAllNewsInDB();
+        res.json({ success: true, message: 'Notícias reclassificadas com sucesso.', ...result });
+    } catch (err) {
+        console.error("Erro no /api/public/categories/reclassify:", err);
+        res.status(500).json({ error: 'Erro ao reclassificar notícias.', details: err.message });
+    }
+});
+
 app.get('/api/public/categories/:slug', async (req, res) => {
     try {
         const CategoryRepository = require('./repositories/categoryRepository');
@@ -501,13 +524,24 @@ app.get('/api/public/categories/:slug', async (req, res) => {
         }
         
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
+        const limit = parseInt(req.query.limit) || 15;
+        const sort = req.query.sort || 'score';
         
-        const result = await catRepo.getNewsByCategory(req.params.slug, page, limit);
+        const result = await catRepo.getNewsByCategory(req.params.slug, page, limit, sort);
+        const sidebar = await catRepo.getSidebarData(req.params.slug);
         
+        // Buscar a contagem total de artigos desta categoria
+        const allCategories = await catRepo.getCategoriesWithStats();
+        const currentStat = allCategories.find(c => c.slug === req.params.slug);
+        const articleCount = currentStat ? currentStat.articleCount : result.pagination.total;
+
         res.json({
-            category: categoryMeta,
+            category: {
+                ...categoryMeta,
+                articleCount
+            },
             news: result.data,
+            sidebar,
             pagination: result.pagination
         });
     } catch (err) {
