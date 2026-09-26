@@ -112,29 +112,32 @@ async function initializeDatabase(pool) {
             FROM edition_selections
         `);
 
-        // 5. Migração das fontes Hardcoded para o Banco (Se a tabela estiver vazia)
-        const [sources] = await pool.execute('SELECT COUNT(*) as count FROM news_sources');
-        if (sources[0].count === 0) {
-            console.log('[DB INIT] Populando fontes de notícias padrão...');
-            const defaultSources = [
-                { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', category: 'desenvolvimento', lang: 'en' },
-                { name: 'TechCrunch AI', url: 'https://techcrunch.com/category/artificial-intelligence/feed/', category: 'ia', lang: 'en' },
-                { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', category: 'desenvolvimento', lang: 'en' },
-                { name: 'Wired', url: 'https://www.wired.com/feed/rss', category: 'desenvolvimento', lang: 'en' },
-                { name: 'Olhar Digital', url: 'https://olhardigital.com.br/rss', category: 'desenvolvimento', lang: 'pt-BR' },
-                { name: 'Canaltech', url: 'https://canaltech.com.br/rss', category: 'desenvolvimento', lang: 'pt-BR' },
-                { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'desenvolvimento', lang: 'en' },
-                { name: 'Hacker News AI', url: 'https://hnrss.org/newest?q=AI+OR+LLM+OR+GPT+OR+OpenAI', category: 'ia', lang: 'en' },
-                { name: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/', category: 'ciberseguranca', lang: 'en' },
-                { name: 'AWS News Blog', url: 'https://aws.amazon.com/blogs/aws/feed/', category: 'cloud', lang: 'en' }
-            ];
+        // 5. Migração/Inclusão das Fontes de Notícias no Banco
+        console.log('[DB INIT] Garantindo presença das fontes de notícias padrão...');
+        const defaultSources = [
+            { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', category: 'desenvolvimento', lang: 'en' },
+            { name: 'TechCrunch AI', url: 'https://techcrunch.com/category/artificial-intelligence/feed/', category: 'ia', lang: 'en' },
+            { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', category: 'desenvolvimento', lang: 'en' },
+            { name: 'Wired', url: 'https://www.wired.com/feed/rss', category: 'desenvolvimento', lang: 'en' },
+            { name: 'Olhar Digital', url: 'https://olhardigital.com.br/rss', category: 'desenvolvimento', lang: 'pt-BR' },
+            { name: 'Canaltech', url: 'https://canaltech.com.br/rss', category: 'desenvolvimento', lang: 'pt-BR' },
+            { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'desenvolvimento', lang: 'en' },
+            { name: 'Hacker News AI', url: 'https://hnrss.org/newest?q=AI+OR+LLM+OR+GPT+OR+OpenAI', category: 'ia', lang: 'en' },
+            { name: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/', category: 'ciberseguranca', lang: 'en' },
+            { name: 'AWS News Blog', url: 'https://aws.amazon.com/blogs/aws/feed/', category: 'cloud', lang: 'en' },
+            // Novas fontes brasileiras (Adicionadas em 26/09/2026)
+            { name: 'Tecnoblog', url: 'https://tecnoblog.net/feed/', category: 'desenvolvimento', lang: 'pt-BR' },
+            { name: 'TechTudo', url: 'https://www.techtudo.com.br/rss/techtudo/', category: 'desenvolvimento', lang: 'pt-BR' },
+            { name: 'TecMundo', url: 'https://rss.tecmundo.com.br/feed', category: 'desenvolvimento', lang: 'pt-BR' },
+            { name: 'Hardware.com.br', url: 'https://www.hardware.com.br/feed/', category: 'hardware', lang: 'pt-BR' },
+            { name: 'Startupi', url: 'https://startupi.com.br/feed/', category: 'startups', lang: 'pt-BR' }
+        ];
 
-            for (const src of defaultSources) {
-                await pool.execute(
-                    'INSERT IGNORE INTO news_sources (name, rss_url, category, language) VALUES (?, ?, ?, ?)',
-                    [src.name, src.url, src.category, src.lang]
-                );
-            }
+        for (const src of defaultSources) {
+            await pool.execute(
+                'INSERT IGNORE INTO news_sources (name, rss_url, category, language) VALUES (?, ?, ?, ?)',
+                [src.name, src.url, src.category, src.lang]
+            );
         }
 
         console.log('[DB INIT] ✅ Estrutura de banco (V2) inicializada com sucesso.');
