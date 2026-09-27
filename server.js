@@ -8,11 +8,11 @@ const { sendEmail } = require('./services/emailSender');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const { randomUUID } = crypto;
 const { initializeDatabase } = require('./repositories/dbInit');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
 const { translateNewsItems, isBrazilianSource } = require('./services/newsTranslation');
 const jwt = require('jsonwebtoken');
-
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -58,6 +58,7 @@ async function initDB() {
             email VARCHAR(255) UNIQUE NOT NULL,
             timezone VARCHAR(100) DEFAULT 'America/Sao_Paulo',
             topic VARCHAR(100) DEFAULT 'tecnologia',
+            token VARCHAR(36) UNIQUE,
             subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`);
 
@@ -70,6 +71,25 @@ async function initDB() {
             await pool.execute(`ALTER TABLE subscribers ADD COLUMN topic VARCHAR(100) DEFAULT 'tecnologia'`);
             console.log('✅ Coluna topic adicionada à tabela de inscritos (ou já existia).');
         } catch (e) { }
+
+        // Migration segura (compatível com MySQL 8.0+, TiDB e MariaDB) para adicionar coluna 'token'
+        try {
+            const [cols] = await pool.query(
+                `SELECT COUNT(*) AS count FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'subscribers'
+                   AND COLUMN_NAME = 'token'`
+            );
+
+            if (cols[0].count === 0) {
+                await pool.execute(`ALTER TABLE subscribers ADD COLUMN token VARCHAR(36) UNIQUE`);
+                await pool.execute(`UPDATE subscribers SET token = UUID() WHERE token IS NULL OR token = ''`);
+                await pool.execute(`ALTER TABLE subscribers MODIFY token VARCHAR(36) NOT NULL`);
+                console.log('✅ Coluna token (UUID) criada e preenchida na tabela de inscritos.');
+            }
+        } catch (e) {
+            console.warn('⚠️ Aviso ao verificar/criar coluna token:', e.message);
+        }
 
         console.log('✅ Banco conectado');
 
@@ -156,11 +176,12 @@ app.post('/subscribe', subscribeLimiter, async (req, res) => {
 
     const userTZ = timezone || 'America/Sao_Paulo';
     const userTopic = topic || 'tecnologia';
+    const subscriberToken = randomUUID();
 
     try {
         await safeExecute(
-            `INSERT INTO subscribers (email, timezone, topic) VALUES (?, ?, ?)`,
-            [email, userTZ, userTopic]
+            `INSERT INTO subscribers (email, timezone, topic, token) VALUES (?, ?, ?, ?)`,
+            [email, userTZ, userTopic, subscriberToken]
         );
 
         console.log(" Salvo no DB");

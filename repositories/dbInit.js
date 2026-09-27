@@ -112,6 +112,21 @@ async function initializeDatabase(pool) {
             FROM edition_selections
         `);
 
+        // 4.3 Tabela de Feedback por Notícia (Upvote / Downvote)
+        await pool.execute(`
+            CREATE TABLE IF NOT EXISTS news_feedback (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              news_id INT NOT NULL,
+              subscriber_id INT NOT NULL,
+              vote ENUM('up', 'down') NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              UNIQUE KEY unique_vote (news_id, subscriber_id),
+              FOREIGN KEY (news_id) REFERENCES news_v2(id) ON DELETE CASCADE,
+              FOREIGN KEY (subscriber_id) REFERENCES subscribers(id) ON DELETE CASCADE
+            )
+        `);
+
         // 5. Migração/Inclusão das Fontes de Notícias no Banco
         console.log('[DB INIT] Garantindo presença das fontes de notícias padrão...');
         const defaultSources = [
