@@ -179,10 +179,15 @@ app.post('/subscribe', subscribeLimiter, async (req, res) => {
     const subscriberToken = randomUUID();
 
     try {
-        await safeExecute(
-            `INSERT INTO subscribers (email, timezone, topic, token) VALUES (?, ?, ?, ?)`,
-            [email, userTZ, userTopic, subscriberToken]
-        );
+        const SubscriberRepository = require('./repositories/subscriberRepository');
+        const subscriberRepo = new SubscriberRepository(pool);
+
+        await subscriberRepo.create({
+            email,
+            timezone: userTZ,
+            topic: userTopic,
+            token: subscriberToken
+        });
 
         console.log(" Salvo no DB");
 
@@ -190,7 +195,7 @@ app.post('/subscribe', subscribeLimiter, async (req, res) => {
 
         if (!emailSent) {
             // Se falhou ao enviar o email, deletamos do banco para não ficar "preso"
-            await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
+            await subscriberRepo.deleteByEmail(email);
             return res.status(500).json({
                 error: "Falha ao enviar email de confirmação. Verifique os logs ou se o e-mail remetente está autorizado no Resend."
             });
@@ -725,6 +730,73 @@ app.post('/api/unsubscribe', async (req, res) => {
 });
 
 // ========================
+// 💬 FEEDBACK ROUTES
+// ========================
+
+app.get('/api/feedback', async (req, res) => {
+    const { news, sub, vote } = req.query;
+
+    if (!news || !sub || !vote || !['up', 'down'].includes(String(vote).toLowerCase())) {
+        console.warn(`[FEEDBACK] ⚠️ Parâmetros inválidos: news=${news}, sub=${sub}, vote=${vote}`);
+        return res.redirect('/feedback-erro');
+    }
+
+    try {
+        const SubscriberRepository = require('./repositories/subscriberRepository');
+        const NewsRepository = require('./repositories/newsRepository');
+        const FeedbackRepository = require('./repositories/feedbackRepository');
+
+        const subscriberRepo = new SubscriberRepository(pool);
+        const newsRepo = new NewsRepository(pool);
+        const feedbackRepo = new FeedbackRepository(pool);
+
+        const subscriber = await subscriberRepo.findByToken(sub);
+        if (!subscriber) {
+            console.warn(`[FEEDBACK] ⚠️ Subscriber não encontrado para token: ${sub}`);
+            return res.redirect('/feedback-erro');
+        }
+
+        const newsItem = await newsRepo.findById(news);
+        if (!newsItem) {
+            console.warn(`[FEEDBACK] ⚠️ Notícia não encontrada para ID: ${news}`);
+            return res.redirect('/feedback-erro');
+        }
+
+        const normalizedVote = String(vote).toLowerCase();
+        await feedbackRepo.upsertFeedback({
+            newsId: Number(news),
+            subscriberId: subscriber.id,
+            vote: normalizedVote
+        });
+
+        console.log(`[FEEDBACK] ✅ Voto '${normalizedVote}' registrado para a notícia #${news} ("${newsItem.title}") pelo leitor ${subscriber.email}`);
+        return res.redirect('/obrigado-feedback');
+    } catch (err) {
+        console.error(`[FEEDBACK] ❌ Erro ao computar voto:`, err.message);
+        return res.redirect('/feedback-erro');
+    }
+});
+
+app.get('/api/admin/feedback/stats', verifyAdmin, async (req, res) => {
+    try {
+        const FeedbackRepository = require('./repositories/feedbackRepository');
+        const feedbackRepo = new FeedbackRepository(pool);
+
+        const stats = await feedbackRepo.getFeedbackStats();
+        const topRated = await feedbackRepo.getTopRatedNews(10);
+
+        res.json({
+            success: true,
+            stats,
+            topRated
+        });
+    } catch (err) {
+        console.error("Erro no /api/admin/feedback/stats:", err);
+        res.status(500).json({ error: 'Erro interno ao buscar estatísticas de feedback.' });
+    }
+});
+
+// ========================
 // ADMIN SELECTION ENGINE
 // ========================
 
@@ -1044,14 +1116,23 @@ async function loadSchedules() {
 // ========================
 // START
 // =======================
-// Servir o Frontend construído (apenas no Render/Produção)
+// Servir o Frontend construído e páginas estáticas da pasta public
 const frontendPath = path.join(__dirname, 'newsletter-frontend', 'out');
 const publicFrontendPath = path.join(__dirname, 'frontend', 'dist');
+const publicPath = path.join(__dirname, 'public');
 
+// Serve pasta public (para páginas de confirmação/erro, imagens, etc)
+app.use(express.static(publicPath, { extensions: ['html'] }));
 // Serve novo frontend primeiro (para homepage, assets, etc)
 app.use(express.static(publicFrontendPath, { extensions: ['html'] }));
 // Serve o antigo frontend como fallback (para assets do admin)
 app.use(express.static(frontendPath, { extensions: ['html'] }));
+
+// Rotas explícitas de feedback (evitam problemas de extensão .html)
+app.get('/obrigado-feedback', (req, res) => res.sendFile(path.join(publicPath, 'obrigado-feedback.html')));
+app.get('/obrigado-feedback.html', (req, res) => res.sendFile(path.join(publicPath, 'obrigado-feedback.html')));
+app.get('/feedback-erro', (req, res) => res.sendFile(path.join(publicPath, 'feedback-erro.html')));
+app.get('/feedback-erro.html', (req, res) => res.sendFile(path.join(publicPath, 'feedback-erro.html')));
 
 // Rotas explícitas para garantir que pastas/subpastas com barra final não caiam no fallback SPA errado
 app.get('/admin', (req, res) => res.sendFile(path.join(frontendPath, 'admin.html')));
@@ -1065,7 +1146,7 @@ app.get('/admin/selection/', (req, res) => res.sendFile(path.join(frontendPath, 
 
 // Fallback SPA: Qualquer rota não reconhecida devolve o index.html do frontend (se existir)
 app.get(/.*/, (req, res, next) => {
-    if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email') || req.path.startsWith('/api')) {
+    if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email') || req.path.startsWith('/api') || req.path.startsWith('/obrigado-feedback') || req.path.startsWith('/feedback-erro')) {
         return next();
     }
     

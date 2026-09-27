@@ -101,6 +101,23 @@ class NewsRepository {
             throw error;
         }
     }
+
+    /**
+     * Busca uma notícia pelo seu ID
+     * @param {number|string} id ID da notícia
+     */
+    async findById(id) {
+        try {
+            const [rows] = await this.pool.execute(
+                'SELECT id, title, original_link, category, score, status FROM news_v2 WHERE id = ?',
+                [id]
+            );
+            return rows[0] || null;
+        } catch (error) {
+            console.error(`[NewsRepo] Erro ao buscar notícia por ID (${id}):`, error);
+            throw error;
+        }
+    }
 }
 
 module.exports = NewsRepository;
