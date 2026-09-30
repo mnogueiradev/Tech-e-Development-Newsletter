@@ -72,7 +72,7 @@ async function initDB() {
             console.log('✅ Coluna topic adicionada à tabela de inscritos (ou já existia).');
         } catch (e) { }
 
-        // Migration segura (compatível com MySQL 8.0+, TiDB e MariaDB) para adicionar coluna 'token'
+        // Migration segura (compatível com MySQL 8.0+, TiDB Cloud e MariaDB) para adicionar coluna 'token'
         try {
             const [cols] = await pool.query(
                 `SELECT COUNT(*) AS count FROM information_schema.COLUMNS
@@ -81,9 +81,20 @@ async function initDB() {
                    AND COLUMN_NAME = 'token'`
             );
 
-            if (cols[0].count === 0) {
-                await pool.execute(`ALTER TABLE subscribers ADD COLUMN token VARCHAR(36) UNIQUE`);
+            if (Number(cols[0].count) === 0) {
+                await pool.execute(`ALTER TABLE subscribers ADD COLUMN token VARCHAR(36)`);
                 await pool.execute(`UPDATE subscribers SET token = UUID() WHERE token IS NULL OR token = ''`);
+
+                const [indexes] = await pool.query(
+                    `SELECT COUNT(*) AS count FROM information_schema.STATISTICS
+                     WHERE TABLE_SCHEMA = DATABASE()
+                       AND TABLE_NAME = 'subscribers'
+                       AND INDEX_NAME = 'idx_subscribers_token'`
+                );
+                if (Number(indexes[0].count) === 0) {
+                    await pool.execute(`ALTER TABLE subscribers ADD UNIQUE INDEX idx_subscribers_token (token)`);
+                }
+
                 await pool.execute(`ALTER TABLE subscribers MODIFY token VARCHAR(36) NOT NULL`);
                 console.log('✅ Coluna token (UUID) criada e preenchida na tabela de inscritos.');
             }
