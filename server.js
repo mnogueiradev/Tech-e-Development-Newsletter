@@ -639,14 +639,54 @@ app.get('/sitemap.xml', async (req, res) => {
 // UNSUBSCRIBE ROUTES
 // ========================
 
+async function resolveSubscriberFromToken(token) {
+    if (!token) return null;
+    try {
+        const SubscriberRepository = require('./repositories/subscriberRepository');
+        const subscriberRepo = new SubscriberRepository(pool);
+
+        // 1. Tenta buscar pelo token UUID direto do banco de dados (novo padrão único e permanente)
+        const subscriber = await subscriberRepo.findByToken(token);
+        if (subscriber) return subscriber;
+    } catch (e) {}
+
+    // 2. Se for um JWT (padrão legado ou e-mails antigos)
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded && decoded.email) {
+            const SubscriberRepository = require('./repositories/subscriberRepository');
+            const subscriberRepo = new SubscriberRepository(pool);
+            const subscriber = await subscriberRepo.findByEmail(decoded.email);
+            if (subscriber) return subscriber;
+            return { email: decoded.email };
+        }
+    } catch (e) {
+        // Se jwt.verify falhou por alteração no JWT_SECRET em reinicializações do servidor
+        try {
+            const decoded = jwt.decode(token);
+            if (decoded && decoded.email) {
+                const SubscriberRepository = require('./repositories/subscriberRepository');
+                const subscriberRepo = new SubscriberRepository(pool);
+                const subscriber = await subscriberRepo.findByEmail(decoded.email);
+                if (subscriber) return subscriber;
+                return { email: decoded.email };
+            }
+        } catch (decodeErr) {}
+    }
+
+    return null;
+}
+
 app.get('/api/unsubscribe', async (req, res) => {
     try {
         const { token } = req.query;
-        if (!token) return res.status(400).send('<h1>Link inv&aacute;lido ou expirado.</h1>');
+        const subscriber = await resolveSubscriberFromToken(token);
 
-        // Apenas valida o token, mas NÃO deleta ainda.
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const email = decoded.email;
+        if (!subscriber || !subscriber.email) {
+            return res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif; color: #0f172a;"><h1>Link inválido ou expirado.</h1></div>');
+        }
+
+        const email = subscriber.email;
 
         // Renderiza a tela de confirmação (evita cliques acidentais no rodapé)
         res.send(`
@@ -684,22 +724,29 @@ app.get('/api/unsubscribe', async (req, res) => {
             </html>
         `);
     } catch (err) {
-        res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif;"><h1>Link inv&aacute;lido ou expirado.</h1></div>');
+        res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif; color: #0f172a;"><h1>Link inválido ou expirado.</h1></div>');
     }
 });
 
 app.post('/api/unsubscribe', async (req, res) => {
     try {
         const token = req.query.token || (req.body && req.body.token);
-        const source = req.body && req.body.source; // Identifica se veio do formulário web
+        const source = req.body && req.body.source;
         if (!token) return res.status(400).send('Token missing');
 
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const email = decoded.email;
+        const subscriber = await resolveSubscriberFromToken(token);
+        if (!subscriber || !subscriber.email) {
+            if (source === 'web') {
+                return res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif;"><h1>Erro ao cancelar: link inválido ou expirado.</h1></div>');
+            }
+            return res.status(400).send('Invalid token');
+        }
 
-        await safeExecute(`DELETE FROM subscribers WHERE email = ?`, [email]);
-        
-        // Se veio do formulário web, mostra uma tela bonitinha de sucesso
+        const email = subscriber.email;
+        const SubscriberRepository = require('./repositories/subscriberRepository');
+        const subscriberRepo = new SubscriberRepository(pool);
+        await subscriberRepo.deleteByEmail(email);
+
         if (source === 'web') {
             return res.send(`
                 <!DOCTYPE html>
@@ -730,7 +777,6 @@ app.post('/api/unsubscribe', async (req, res) => {
             `);
         }
 
-        // Se veio do botão nativo do Gmail (One-Click), exige apenas HTTP 200 silencioso
         res.status(200).send('Unsubscribed');
     } catch (err) {
         if (req.body && req.body.source === 'web') {
@@ -986,7 +1032,7 @@ async function processAndSendNewsletter(tz = null) {
 
     // 3. Buscar inscritos
     try {
-        let query = `SELECT email, topic FROM subscribers`;
+        let query = `SELECT email, topic, token FROM subscribers`;
         let params = [];
         if (tz) {
             query += ` WHERE timezone = ?`;
@@ -999,16 +1045,17 @@ async function processAndSendNewsletter(tz = null) {
             return;
         }
 
-        // Agrupa os emails pelo tópico escolhido
+        // Agrupa os inscritos pelo tópico escolhido
         const subscribersByTopic = rows.reduce((acc, row) => {
             const t = row.topic || 'tecnologia';
             if (!acc[t]) acc[t] = [];
-            acc[t].push(row.email);
+            acc[t].push(row);
             return acc;
         }, {});
 
-        for (const [topic, emails] of Object.entries(subscribersByTopic)) {
-            console.log(`Processando tópico '${topic}' para ${emails.length} inscrito(s): ${emails.join(', ')}`);
+        for (const [topic, subscribers] of Object.entries(subscribersByTopic)) {
+            const emails = subscribers.map(s => s.email);
+            console.log(`Processando tópico '${topic}' para ${subscribers.length} inscrito(s): ${emails.join(', ')}`);
 
             // Obter notícias do banco de dados (V2)
             let newsBR = await getNewsletterItems(topic);
@@ -1023,13 +1070,13 @@ async function processAndSendNewsletter(tz = null) {
             console.log('Enviando newsletters com FROM=', FROM_EMAIL);
             const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
             
-            const sendPromises = emails.map(email => {
-                const token = jwt.sign({ email }, JWT_SECRET);
-                const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${token}`;
+            const sendPromises = subscribers.map(sub => {
+                const subToken = sub.token || jwt.sign({ email: sub.email }, JWT_SECRET);
+                const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${subToken}`;
                 const userHtmlContent = htmlContent.replace('{{UNSUBSCRIBE_URL}}', userUnsubscribeUrl);
 
                 return sendEmail({
-                    to: email,
+                    to: sub.email,
                     subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                     html: userHtmlContent
                 });
