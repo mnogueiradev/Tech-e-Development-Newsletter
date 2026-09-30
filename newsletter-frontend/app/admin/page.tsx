@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Newspaper, CheckCircle, DatabaseZap, Activity, LogOut, RefreshCw, Wand2 } from "lucide-react";
+import { Users, Newspaper, CheckCircle, DatabaseZap, Activity, LogOut, RefreshCw, Wand2, MessageSquareHeart } from "lucide-react";
 
 import { StatCard } from "../../components/admin/DashboardCards";
 import { RecentActivity } from "../../components/admin/RecentActivity";
@@ -116,6 +116,14 @@ export default function AdminDashboard() {
             >
               <Newspaper size={16} />
               <span className="hidden md:inline">CMS Editorial</span>
+            </button>
+            <button
+              onClick={() => router.push('/admin/feedback')}
+              className="flex items-center gap-2 px-4 py-2.5 bg-green-500/10 text-green-400 hover:bg-green-500/20 rounded-lg border border-green-500/20 transition-all font-medium text-sm"
+              title="Ver Feedback dos Leitores"
+            >
+              <MessageSquareHeart size={16} />
+              <span className="hidden md:inline">Feedback</span>
             </button>
             <button
               onClick={() => fetchDashboardData(true)}
