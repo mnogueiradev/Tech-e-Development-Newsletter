@@ -957,6 +957,10 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
                             ${escapeHtml(item.source)}
                         </td>
                         <td align="right" valign="middle">
+                            ${item.id ? `
+                                <a href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=up" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 6px; border: 1px solid #cbd5e1;" title="Gostei desta notícia">👍</a>
+                                <a href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=down" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 12px; border: 1px solid #cbd5e1;" title="Não gostei desta notícia">👎</a>
+                            ` : ''}
                             <a href="${item.link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">Ler mais</a>
                         </td>
                     </tr>
@@ -1019,6 +1023,7 @@ async function getNewsletterItems(topic) {
     }
     
     return filteredItems.slice(0, 9).map(item => ({
+        id: item.id || item.news_id,
         title: item.title,
         link: item.original_link || item.link || '#',
         description: item.description || '',
@@ -1073,7 +1078,10 @@ async function processAndSendNewsletter(tz = null) {
             const sendPromises = subscribers.map(sub => {
                 const subToken = sub.token || jwt.sign({ email: sub.email }, JWT_SECRET);
                 const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${subToken}`;
-                const userHtmlContent = htmlContent.replace('{{UNSUBSCRIBE_URL}}', userUnsubscribeUrl);
+                const userHtmlContent = htmlContent
+                    .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, userUnsubscribeUrl)
+                    .replace(/\{\{PUBLIC_URL\}\}/g, PUBLIC_URL)
+                    .replace(/\{\{SUBSCRIBER_TOKEN\}\}/g, subToken);
 
                 return sendEmail({
                     to: sub.email,
@@ -1119,9 +1127,16 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         const htmlContent = buildEmailHtml(newsBR, topic);
 
         const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
-        const token = jwt.sign({ email }, JWT_SECRET);
-        const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${token}`;
-        const userHtmlContent = htmlContent.replace('{{UNSUBSCRIBE_URL}}', userUnsubscribeUrl);
+        const SubscriberRepository = require('./repositories/subscriberRepository');
+        const subscriberRepo = new SubscriberRepository(pool);
+        const sub = await subscriberRepo.findByEmail(email);
+        const subToken = sub ? sub.token : jwt.sign({ email }, JWT_SECRET);
+
+        const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${subToken}`;
+        const userHtmlContent = htmlContent
+            .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, userUnsubscribeUrl)
+            .replace(/\{\{PUBLIC_URL\}\}/g, PUBLIC_URL)
+            .replace(/\{\{SUBSCRIBER_TOKEN\}\}/g, subToken);
 
         // Envia email usando Resend
         const sendResult = await sendEmail({
