@@ -2,18 +2,23 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Newspaper, CheckCircle, DatabaseZap, Activity, LogOut, RefreshCw, Wand2, MessageSquareHeart } from "lucide-react";
+import { Users, Newspaper, CheckCircle, DatabaseZap, Activity, LogOut, RefreshCw, Wand2, MessageSquareHeart, ArrowRight } from "lucide-react";
 
 import { StatCard } from "../../components/admin/DashboardCards";
 import { RecentActivity } from "../../components/admin/RecentActivity";
 import { TopNews } from "../../components/admin/TopNews";
 import { OperationalStatus } from "../../components/admin/OperationalStatus";
+import { FeedbackSection } from "../../components/admin/FeedbackSection";
 import { API_BASE_URL } from "../../lib/api";
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [feedbackStats, setFeedbackStats] = useState<any>(null);
+  const [topRated, setTopRated] = useState<any[]>([]);
+  const [feedbackError, setFeedbackError] = useState(false);
+  const [refreshingFeedback, setRefreshingFeedback] = useState(false);
   const [isAuth, setIsAuth] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const router = useRouter();
@@ -51,12 +56,46 @@ export default function AdminDashboard() {
     }
   }, [router]);
 
+  const fetchFeedbackData = useCallback(async (isRefresh = false) => {
+    const token = localStorage.getItem("admin_token");
+    if (!token) {
+      setFeedbackError(true);
+      return;
+    }
+
+    if (isRefresh) setRefreshingFeedback(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/feedback/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setFeedbackStats(data.stats ?? null);
+        setTopRated(data.topRated || []);
+        setFeedbackError(false);
+      } else {
+        setFeedbackError(true);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar dados de feedback", err);
+      setFeedbackError(true);
+    } finally {
+      setRefreshingFeedback(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDashboardData();
+    fetchFeedbackData();
     // Atualização automática leve a cada 1 minuto
-    const interval = setInterval(() => fetchDashboardData(false), 60000);
+    const interval = setInterval(() => {
+      fetchDashboardData(false);
+      fetchFeedbackData(false);
+    }, 60000);
     return () => clearInterval(interval);
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, fetchFeedbackData]);
 
   function handleLogout() {
     localStorage.removeItem("admin_token");
@@ -126,12 +165,12 @@ export default function AdminDashboard() {
               <span className="hidden md:inline">Feedback</span>
             </button>
             <button
-              onClick={() => fetchDashboardData(true)}
-              disabled={refreshing}
+              onClick={() => { fetchDashboardData(true); fetchFeedbackData(true); }}
+              disabled={refreshing || refreshingFeedback}
               className="p-2.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg border border-white/10 transition-all disabled:opacity-50"
               title="Atualizar dados"
             >
-              <RefreshCw size={18} className={refreshing ? "animate-spin text-purple-400" : ""} />
+              <RefreshCw size={18} className={(refreshing || refreshingFeedback) ? "animate-spin text-purple-400" : ""} />
             </button>
             <button
               onClick={handleLogout}
@@ -174,6 +213,26 @@ export default function AdminDashboard() {
             status="neutral" 
           />
         </div>
+
+        {/* Section: Feedback dos Leitores */}
+        {!feedbackError && feedbackStats && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <MessageSquareHeart className="text-green-400" size={20} />
+                Feedback dos Leitores
+              </h2>
+              <button
+                onClick={() => router.push('/admin/feedback')}
+                className="flex items-center gap-2 bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20 rounded-lg transition-all font-medium text-sm px-4 py-2"
+              >
+                Ver detalhes
+                <ArrowRight size={16} />
+              </button>
+            </div>
+            <FeedbackSection stats={feedbackStats} topRated={topRated.slice(0, 5)} />
+          </div>
+        )}
 
         {/* Sections 3, 4, 5 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
