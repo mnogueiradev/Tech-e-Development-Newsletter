@@ -324,8 +324,13 @@ app.get('/subscribers', verifyAdmin, async (req, res) => {
 
 app.get('/trigger-email', verifyAdmin, async (req, res) => {
     try {
-        await processAndSendNewsletter();
-        res.json({ message: 'Newsletter processada e enviada com sucesso! Verifique o console.' });
+        const resumo = await processAndSendNewsletter();
+        if (!resumo || resumo.sent === 0) {
+            // 0 e-mails enviados = falha: o cron externo considera qualquer 2xx um sucesso
+            res.status(500).json({ message: 'Nenhum e-mail enviado. Verifique o console.', ...resumo });
+        } else {
+            res.json({ message: 'Newsletter processada e enviada com sucesso! Verifique o console.', ...resumo });
+        }
     } catch (err) {
         console.error("Erro no /trigger-email:", err);
         res.status(500).json({ error: 'Erro interno ao processar e enviar a newsletter.' });
@@ -1035,6 +1040,9 @@ async function getNewsletterItems(topic) {
 async function processAndSendNewsletter(tz = null) {
     console.log(`Iniciando processamento da newsletter diária${tz ? ` para o fuso ${tz}` : ''}...`);
 
+    // Resumo do envio — sempre retornado ao final (nunca relança exceção)
+    const resumo = { sent: 0, failed: 0, topics: [], errors: [] };
+
     // 3. Buscar inscritos
     try {
         let query = `SELECT email, topic, token FROM subscribers`;
@@ -1047,7 +1055,6 @@ async function processAndSendNewsletter(tz = null) {
 
         if (rows.length === 0) {
             console.log('Nenhum inscrito para este fuso horário. Nenhuma notícia enviada.');
-            return;
         }
 
         // Agrupa os inscritos pelo tópico escolhido
@@ -1059,58 +1066,84 @@ async function processAndSendNewsletter(tz = null) {
         }, {});
 
         for (const [topic, subscribers] of Object.entries(subscribersByTopic)) {
-            const emails = subscribers.map(s => s.email);
-            console.log(`Processando tópico '${topic}' para ${subscribers.length} inscrito(s): ${emails.join(', ')}`);
+            const topicResumo = { topic, inscritos: subscribers.length, sent: 0, failed: 0 };
+            resumo.topics.push(topicResumo);
 
-            // Obter notícias do banco de dados (V2)
-            let newsBR = await getNewsletterItems(topic);
+            try {
+                const emails = subscribers.map(s => s.email);
+                console.log(`Processando tópico '${topic}' para ${subscribers.length} inscrito(s): ${emails.join(', ')}`);
 
-            console.log(`📰 Notícias preparadas para '${topic}': ${newsBR.length} itens`);
+                // Obter notícias do banco de dados (V2)
+                let newsBR = await getNewsletterItems(topic);
 
-            newsBR = await translateNewsItems(newsBR);
+                console.log(`📰 Notícias preparadas para '${topic}': ${newsBR.length} itens`);
 
-            const htmlContent = buildEmailHtml(newsBR, topic);
-
-            // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
-            console.log('Enviando newsletters com FROM=', FROM_EMAIL);
-            const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
-            
-            const sendPromises = subscribers.map(sub => {
-                const subToken = sub.token || jwt.sign({ email: sub.email }, JWT_SECRET);
-                const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${subToken}`;
-                const userHtmlContent = htmlContent
-                    .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, userUnsubscribeUrl)
-                    .replace(/\{\{PUBLIC_URL\}\}/g, PUBLIC_URL)
-                    .replace(/\{\{SUBSCRIBER_TOKEN\}\}/g, subToken);
-
-                return sendEmail({
-                    to: sub.email,
-                    subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
-                    html: userHtmlContent
-                });
-            });
-
-            const results = await Promise.allSettled(sendPromises);
-
-            results.forEach((r, i) => {
-                const toEmail = emails[i];
-                if (r.status === 'fulfilled' && r.value.success) {
-                    console.log(`Enviado para ${toEmail} com ID: ${r.value.id}`);
-                } else {
-                    console.error(`Falha ao enviar para ${toEmail}:`, r.reason || (r.value && r.value.error) || 'Erro desconhecido');
+                if (!newsBR || newsBR.length === 0) {
+                    // Nunca enviar e-mail vazio: aborta só este tópico e segue para o próximo
+                    const aviso = `[NEWSLETTER] ⚠️ 0 notícias para o tópico ${topic} — envio abortado para este tópico`;
+                    console.log(aviso);
+                    resumo.errors.push(aviso);
+                    continue;
                 }
-            });
 
-            const failed = results.filter(r => r.status === 'rejected' || (r.value && !r.value.success));
-            if (failed.length > 0) {
-                console.error(`Erro ao enviar newsletter '${topic}' para ${failed.length} inscritos.`);
-            } else {
-                console.log(`Newsletter '${topic}' enviada com sucesso para ${emails.length} inscritos!`);
+                newsBR = await translateNewsItems(newsBR);
+
+                const htmlContent = buildEmailHtml(newsBR, topic);
+
+                // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
+                console.log('Enviando newsletters com FROM=', FROM_EMAIL);
+                const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
+
+                const sendPromises = subscribers.map(sub => {
+                    const subToken = sub.token || jwt.sign({ email: sub.email }, JWT_SECRET);
+                    const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${subToken}`;
+                    const userHtmlContent = htmlContent
+                        .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, userUnsubscribeUrl)
+                        .replace(/\{\{PUBLIC_URL\}\}/g, PUBLIC_URL)
+                        .replace(/\{\{SUBSCRIBER_TOKEN\}\}/g, subToken);
+
+                    return sendEmail({
+                        to: sub.email,
+                        subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
+                        html: userHtmlContent
+                    });
+                });
+
+                const results = await Promise.allSettled(sendPromises);
+
+                results.forEach((r, i) => {
+                    const toEmail = emails[i];
+                    if (r.status === 'fulfilled' && r.value.success) {
+                        console.log(`Enviado para ${toEmail} com ID: ${r.value.id}`);
+                    } else {
+                        console.error(`Falha ao enviar para ${toEmail}:`, r.reason || (r.value && r.value.error) || 'Erro desconhecido');
+                    }
+                });
+
+                const failed = results.filter(r => r.status === 'rejected' || (r.value && !r.value.success));
+                topicResumo.sent = results.length - failed.length;
+                topicResumo.failed = failed.length;
+                resumo.sent += topicResumo.sent;
+                resumo.failed += topicResumo.failed;
+
+                if (failed.length > 0) {
+                    console.error(`Erro ao enviar newsletter '${topic}' para ${failed.length} inscritos.`);
+                } else {
+                    console.log(`Newsletter '${topic}' enviada com sucesso para ${emails.length} inscritos!`);
+                }
+            } catch (err) {
+                // Uma falha no tópico não pode abortar os demais tópicos
+                console.error(`Erro ao processar o tópico '${topic}':`, err);
+                resumo.errors.push(`Tópico '${topic}': ${err && err.message ? err.message : err}`);
             }
         }
     } catch (err) {
         console.error('Erro ao buscar inscritos e processar newsletter:', err);
+        resumo.errors.push(`Erro ao buscar inscritos e processar newsletter: ${err && err.message ? err.message : err}`);
     }
+
+    console.log('[NEWSLETTER-RESUMO] ' + JSON.stringify(resumo));
+    return resumo;
 }
 
 async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
@@ -1178,11 +1211,21 @@ async function loadSchedules() {
     if (!pool) return;
     try {
         const [rows] = await pool.query('SELECT DISTINCT timezone FROM subscribers WHERE timezone IS NOT NULL');
-        rows.forEach(row => {
-            scheduleCronForTimezone(row.timezone);
+        const timezones = (rows || []).map(row => row.timezone).filter(tz => tz && tz.trim() !== '');
+
+        if (timezones.length === 0) {
+            console.error('[CRON] ⚠️ Nenhum timezone de inscrito encontrado — agendando fallback America/Sao_Paulo');
+            scheduleCronForTimezone('America/Sao_Paulo');
+            return;
+        }
+
+        timezones.forEach(tz => {
+            scheduleCronForTimezone(tz);
         });
     } catch (err) {
         console.error('Erro ao carregar fusos horários do banco:', err.message);
+        console.error('[CRON] ⚠️ Nenhum timezone de inscrito encontrado — agendando fallback America/Sao_Paulo');
+        scheduleCronForTimezone('America/Sao_Paulo');
     }
 }
 
