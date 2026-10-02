@@ -1094,7 +1094,10 @@ async function processAndSendNewsletter(tz = null) {
                 console.log('Enviando newsletters com FROM=', FROM_EMAIL);
                 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
 
-                const sendPromises = subscribers.map(sub => {
+                // Envio SEQUENCIAL (um inscrito por vez) para respeitar o rate limit do Resend (10 req/s)
+                const results = [];
+                for (let i = 0; i < subscribers.length; i++) {
+                    const sub = subscribers[i];
                     const subToken = sub.token || jwt.sign({ email: sub.email }, JWT_SECRET);
                     const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${subToken}`;
                     const userHtmlContent = htmlContent
@@ -1102,14 +1105,17 @@ async function processAndSendNewsletter(tz = null) {
                         .replace(/\{\{PUBLIC_URL\}\}/g, PUBLIC_URL)
                         .replace(/\{\{SUBSCRIBER_TOKEN\}\}/g, subToken);
 
-                    return sendEmail({
+                    const result = await sendEmail({
                         to: sub.email,
                         subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                         html: userHtmlContent
                     });
-                });
 
-                const results = await Promise.allSettled(sendPromises);
+                    results.push({ status: 'fulfilled', value: result });
+
+                    // Aguarda 600ms entre cada envio
+                    await new Promise(r => setTimeout(r, 600));
+                }
 
                 results.forEach((r, i) => {
                     const toEmail = emails[i];
