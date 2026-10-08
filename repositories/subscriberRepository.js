@@ -29,6 +29,19 @@ class SubscriberRepository {
         }
     }
 
+    async updateToken(email, token) {
+        try {
+            await this.pool.execute(
+                'UPDATE subscribers SET token = ? WHERE email = ?',
+                [token, email]
+            );
+            return true;
+        } catch (error) {
+            console.error(`[SubscriberRepo] Erro ao atualizar token (${email}):`, error);
+            throw error;
+        }
+    }
+
     async create({ email, timezone, topic, token }) {
         try {
             const [result] = await this.pool.execute(

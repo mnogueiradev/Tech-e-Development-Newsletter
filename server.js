@@ -102,6 +102,13 @@ async function initDB() {
             console.warn('⚠️ Aviso ao verificar/criar coluna token:', e.message);
         }
 
+        // Garante que TODOS os inscritos existentes sem token recebam um UUID permanente
+        try {
+            await pool.execute(`UPDATE subscribers SET token = UUID() WHERE token IS NULL OR token = ''`);
+        } catch (e) {
+            console.warn('⚠️ Aviso ao garantir preenchimento de tokens UUID em subscribers:', e.message);
+        }
+
         console.log('✅ Banco conectado');
 
         setInterval(async () => {
@@ -646,94 +653,147 @@ app.get('/sitemap.xml', async (req, res) => {
 
 async function resolveSubscriberFromToken(token) {
     if (!token) return null;
-    try {
-        const SubscriberRepository = require('./repositories/subscriberRepository');
-        const subscriberRepo = new SubscriberRepository(pool);
+    const cleanToken = String(token).trim();
+    if (!cleanToken) return null;
 
-        // 1. Tenta buscar pelo token UUID direto do banco de dados (novo padrão único e permanente)
-        const subscriber = await subscriberRepo.findByToken(token);
+    const SubscriberRepository = require('./repositories/subscriberRepository');
+    const subscriberRepo = new SubscriberRepository(pool);
+
+    // 1. Tenta buscar pelo token UUID direto do banco de dados (padrão único e permanente, NUNCA expira)
+    try {
+        const subscriber = await subscriberRepo.findByToken(cleanToken);
         if (subscriber) return subscriber;
-    } catch (e) {}
+    } catch (e) {
+        console.error('[UNSUBSCRIBE] Erro ao buscar inscrito por token UUID:', e.message);
+    }
 
-    // 2. Se for um JWT (padrão legado ou e-mails antigos)
+    // 2. Se for um token legado (ex: JWT de e-mails antigos já disparados)
+    // Decodifica sem validar expiração e sem checar assinatura (para não falhar por expiração ou alteração de JWT_SECRET)
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.decode(cleanToken);
         if (decoded && decoded.email) {
-            const SubscriberRepository = require('./repositories/subscriberRepository');
-            const subscriberRepo = new SubscriberRepository(pool);
             const subscriber = await subscriberRepo.findByEmail(decoded.email);
             if (subscriber) return subscriber;
             return { email: decoded.email };
         }
     } catch (e) {
-        // Se jwt.verify falhou por alteração no JWT_SECRET em reinicializações do servidor
-        try {
-            const decoded = jwt.decode(token);
-            if (decoded && decoded.email) {
-                const SubscriberRepository = require('./repositories/subscriberRepository');
-                const subscriberRepo = new SubscriberRepository(pool);
-                const subscriber = await subscriberRepo.findByEmail(decoded.email);
-                if (subscriber) return subscriber;
-                return { email: decoded.email };
-            }
-        } catch (decodeErr) {}
+        console.error('[UNSUBSCRIBE] Erro ao decodificar token JWT legado:', e.message);
     }
 
     return null;
 }
 
-app.get('/api/unsubscribe', async (req, res) => {
+const renderUnsubscribeConfirmPage = (email, token, actionPath) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Cancelar Inscrição - Tech & Development Newsletter</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+            .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 420px; text-align: center; }
+            .logo { max-width: 120px; height: auto; margin-bottom: 24px; border-radius: 50%; border: 4px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+            h1 { color: #0f172a; font-size: 24px; margin-top: 0; font-weight: 800; letter-spacing: -0.5px; }
+            p { color: #475569; font-size: 16px; margin-bottom: 30px; line-height: 1.6; }
+            .btn { background-color: #dc2626; color: white; border: none; padding: 14px 24px; font-size: 16px; font-weight: bold; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; width: 100%; box-sizing: border-box; transition: background-color 0.2s; }
+            .btn:hover { background-color: #b91c1c; }
+            .cancel-link { display: block; margin-top: 20px; color: #64748b; text-decoration: none; font-size: 15px; font-weight: 500; transition: color 0.2s; }
+            .cancel-link:hover { text-decoration: underline; color: #0f172a; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Tech & Dev Logo" class="logo">
+            <h1>Que pena ver você partir...</h1>
+            <p>Tem certeza que deseja cancelar sua inscrição e parar de receber nossa curadoria de notícias no e-mail <strong>${email}</strong>?</p>
+            <form action="${actionPath}" method="POST">
+                <input type="hidden" name="token" value="${token}">
+                <input type="hidden" name="source" value="web">
+                <button type="submit" class="btn">Sim, cancelar minha inscrição</button>
+            </form>
+            <a href="https://techndevn.com" class="cancel-link">Não, mudei de ideia!</a>
+        </div>
+    </body>
+    </html>
+`;
+
+const renderUnsubscribeDonePage = (email) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Inscrição Cancelada - Tech & Development Newsletter</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+            .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 420px; text-align: center; }
+            .logo { max-width: 120px; height: auto; margin-bottom: 24px; border-radius: 50%; filter: grayscale(100%); opacity: 0.7; }
+            h1 { color: #0f172a; font-size: 24px; margin-top: 0; font-weight: 800; letter-spacing: -0.5px; }
+            p { color: #475569; font-size: 16px; margin-bottom: 30px; line-height: 1.6; }
+            .btn { background-color: #2563eb; color: white; border: none; padding: 14px 24px; font-size: 16px; font-weight: bold; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; box-sizing: border-box; transition: background-color 0.2s; }
+            .btn:hover { background-color: #1d4ed8; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Tech & Dev Logo" class="logo">
+            <h1>Inscrição Cancelada</h1>
+            <p>Você não receberá mais e-mails no endereço <strong>${email}</strong>.</p>
+            <p style="font-size: 14px; color: #64748b;">Foi muito bom ter você com a gente. As portas estarão sempre abertas caso decida voltar!</p>
+            <a href="https://techndevn.com" class="btn">Voltar para o site</a>
+        </div>
+    </body>
+    </html>
+`;
+
+const renderUnsubscribeNotFoundPage = () => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Inscrição Já Cancelada ou Link Inválido - Tech & Development Newsletter</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+            .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 440px; text-align: center; }
+            h1 { color: #0f172a; font-size: 22px; margin-top: 0; font-weight: 800; }
+            p { color: #475569; font-size: 15px; margin-bottom: 24px; line-height: 1.6; }
+            .btn { background-color: #2563eb; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>Inscrição já cancelada ou link inválido</h1>
+            <p>Não encontramos uma inscrição ativa para este link. Se você já confirmou o cancelamento anteriormente, seu e-mail já foi removido da nossa lista.</p>
+            <a href="https://techndevn.com" class="btn">Ir para o site</a>
+        </div>
+    </body>
+    </html>
+`;
+
+const handleUnsubscribeGet = async (req, res) => {
     try {
         const { token } = req.query;
-        const subscriber = await resolveSubscriberFromToken(token);
-
-        if (!subscriber || !subscriber.email) {
-            return res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif; color: #0f172a;"><h1>Link inválido ou expirado.</h1></div>');
+        if (!token) {
+            return res.status(400).send(renderUnsubscribeNotFoundPage());
         }
 
-        const email = subscriber.email;
+        const subscriber = await resolveSubscriberFromToken(token);
+        if (!subscriber || !subscriber.email) {
+            return res.status(400).send(renderUnsubscribeNotFoundPage());
+        }
 
-        // Renderiza a tela de confirmação (evita cliques acidentais no rodapé)
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>Cancelar Inscrição - Tech & Development Newsletter</title>
-                <style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-                    .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 420px; text-align: center; }
-                    .logo { max-width: 120px; height: auto; margin-bottom: 24px; border-radius: 50%; border: 4px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-                    h1 { color: #0f172a; font-size: 24px; margin-top: 0; font-weight: 800; letter-spacing: -0.5px; }
-                    p { color: #475569; font-size: 16px; margin-bottom: 30px; line-height: 1.6; }
-                    .btn { background-color: #dc2626; color: white; border: none; padding: 14px 24px; font-size: 16px; font-weight: bold; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; width: 100%; box-sizing: border-box; transition: background-color 0.2s; }
-                    .btn:hover { background-color: #b91c1c; }
-                    .cancel-link { display: block; margin-top: 20px; color: #64748b; text-decoration: none; font-size: 15px; font-weight: 500; transition: color 0.2s; }
-                    .cancel-link:hover { text-decoration: underline; color: #0f172a; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Tech & Dev Logo" class="logo">
-                    <h1>Que pena ver você partir...</h1>
-                    <p>Tem certeza que deseja cancelar sua inscrição e parar de receber nossa curadoria de notícias no e-mail <strong>${email}</strong>?</p>
-                    <form action="/api/unsubscribe" method="POST">
-                        <input type="hidden" name="token" value="${token}">
-                        <input type="hidden" name="source" value="web">
-                        <button type="submit" class="btn">Sim, cancelar minha inscrição</button>
-                    </form>
-                    <a href="https://techndevn.com" class="cancel-link">Não, mudei de ideia!</a>
-                </div>
-            </body>
-            </html>
-        `);
+        // Renderiza a tela de confirmação (evita cancelamentos automáticos por leitores de anti-spam)
+        const actionPath = req.originalUrl.split('?')[0];
+        res.send(renderUnsubscribeConfirmPage(subscriber.email, token, actionPath));
     } catch (err) {
-        res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif; color: #0f172a;"><h1>Link inválido ou expirado.</h1></div>');
+        console.error('[UNSUBSCRIBE] Erro no GET unsubscribe:', err);
+        res.status(400).send(renderUnsubscribeNotFoundPage());
     }
-});
+};
 
-app.post('/api/unsubscribe', async (req, res) => {
+const handleUnsubscribePost = async (req, res) => {
     try {
         const token = req.query.token || (req.body && req.body.token);
         const source = req.body && req.body.source;
@@ -742,7 +802,7 @@ app.post('/api/unsubscribe', async (req, res) => {
         const subscriber = await resolveSubscriberFromToken(token);
         if (!subscriber || !subscriber.email) {
             if (source === 'web') {
-                return res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif;"><h1>Erro ao cancelar: link inválido ou expirado.</h1></div>');
+                return res.status(400).send(renderUnsubscribeNotFoundPage());
             }
             return res.status(400).send('Invalid token');
         }
@@ -753,43 +813,23 @@ app.post('/api/unsubscribe', async (req, res) => {
         await subscriberRepo.deleteByEmail(email);
 
         if (source === 'web') {
-            return res.send(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <title>Inscrição Cancelada - Tech & Development Newsletter</title>
-                    <style>
-                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-                        .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 420px; text-align: center; }
-                        .logo { max-width: 120px; height: auto; margin-bottom: 24px; border-radius: 50%; filter: grayscale(100%); opacity: 0.7; }
-                        h1 { color: #0f172a; font-size: 24px; margin-top: 0; font-weight: 800; letter-spacing: -0.5px; }
-                        p { color: #475569; font-size: 16px; margin-bottom: 30px; line-height: 1.6; }
-                        .btn { background-color: #2563eb; color: white; border: none; padding: 14px 24px; font-size: 16px; font-weight: bold; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; box-sizing: border-box; transition: background-color 0.2s; }
-                        .btn:hover { background-color: #1d4ed8; }
-                    </style>
-                </head>
-                <body>
-                    <div class="card">
-                        <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Tech & Dev Logo" class="logo">
-                        <h1>Inscrição Cancelada</h1>
-                        <p>Você não receberá mais e-mails no endereço <strong>${email}</strong>.</p>
-                        <p style="font-size: 14px; color: #64748b;">Foi muito bom ter você com a gente. As portas estarão sempre abertas caso decida voltar!</p>
-                        <a href="https://techndevn.com" class="btn">Voltar para o site</a>
-                    </div>
-                </body>
-                </html>
-            `);
+            return res.send(renderUnsubscribeDonePage(email));
         }
 
         res.status(200).send('Unsubscribed');
     } catch (err) {
+        console.error('[UNSUBSCRIBE] Erro no POST unsubscribe:', err);
         if (req.body && req.body.source === 'web') {
-            return res.status(400).send('<div style="text-align:center; padding: 50px; font-family: sans-serif;"><h1>Erro ao cancelar: link inválido ou expirado.</h1></div>');
+            return res.status(400).send(renderUnsubscribeNotFoundPage());
         }
         res.status(400).send('Invalid token');
     }
-});
+};
+
+app.get('/unsubscribe', handleUnsubscribeGet);
+app.get('/api/unsubscribe', handleUnsubscribeGet);
+app.post('/unsubscribe', handleUnsubscribePost);
+app.post('/api/unsubscribe', handleUnsubscribePost);
 
 // ========================
 // 💬 FEEDBACK ROUTES
@@ -1098,8 +1138,17 @@ async function processAndSendNewsletter(tz = null) {
                 const results = [];
                 for (let i = 0; i < subscribers.length; i++) {
                     const sub = subscribers[i];
-                    const subToken = sub.token || jwt.sign({ email: sub.email }, JWT_SECRET);
-                    const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${subToken}`;
+                    let subToken = sub.token;
+                    if (!subToken) {
+                        subToken = randomUUID();
+                        try {
+                            await pool.execute('UPDATE subscribers SET token = ? WHERE email = ?', [subToken, sub.email]);
+                            sub.token = subToken;
+                        } catch (tokenErr) {
+                            console.error('[NEWSLETTER] Erro ao persistir token UUID permanente:', sub.email, tokenErr);
+                        }
+                    }
+                    const userUnsubscribeUrl = `${PUBLIC_URL}/unsubscribe?token=${subToken}`;
                     const userHtmlContent = htmlContent
                         .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, userUnsubscribeUrl)
                         .replace(/\{\{PUBLIC_URL\}\}/g, PUBLIC_URL)
@@ -1169,9 +1218,20 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         const SubscriberRepository = require('./repositories/subscriberRepository');
         const subscriberRepo = new SubscriberRepository(pool);
         const sub = await subscriberRepo.findByEmail(email);
-        const subToken = sub ? sub.token : jwt.sign({ email }, JWT_SECRET);
+        let subToken = sub ? sub.token : null;
+        if (!subToken) {
+            subToken = randomUUID();
+            if (sub) {
+                try {
+                    await subscriberRepo.updateToken(email, subToken);
+                    sub.token = subToken;
+                } catch (tokenErr) {
+                    console.error('[WELCOME] Erro ao persistir token UUID permanente:', email, tokenErr);
+                }
+            }
+        }
 
-        const userUnsubscribeUrl = `${PUBLIC_URL}/api/unsubscribe?token=${subToken}`;
+        const userUnsubscribeUrl = `${PUBLIC_URL}/unsubscribe?token=${subToken}`;
         const userHtmlContent = htmlContent
             .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, userUnsubscribeUrl)
             .replace(/\{\{PUBLIC_URL\}\}/g, PUBLIC_URL)
@@ -1268,7 +1328,7 @@ app.get('/admin/selection/', (req, res) => res.sendFile(path.join(frontendPath, 
 
 // Fallback SPA: Qualquer rota não reconhecida devolve o index.html do frontend (se existir)
 app.get(/.*/, (req, res, next) => {
-    if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/trigger-email') || req.path.startsWith('/api') || req.path.startsWith('/obrigado-feedback') || req.path.startsWith('/feedback-erro')) {
+    if (req.path.startsWith('/subscribe') || req.path.startsWith('/subscribers') || req.path.startsWith('/unsubscribe') || req.path.startsWith('/trigger-email') || req.path.startsWith('/api') || req.path.startsWith('/obrigado-feedback') || req.path.startsWith('/feedback-erro')) {
         return next();
     }
     
