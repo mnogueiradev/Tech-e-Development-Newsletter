@@ -14,7 +14,7 @@ const RETRY_DELAYS_SECONDS = [2, 5, 10];
  */
 async function sendEmail({ to, subject, html }) {
     const FROM_EMAIL = process.env.FROM_EMAIL || 'newsletter@techndevn.com';
-    const FROM_NAME = 'Tech & Dev Newsletter';
+    const FROM_NAME = 'Techndevn Newsletter';
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
     if (!RESEND_API_KEY) {
