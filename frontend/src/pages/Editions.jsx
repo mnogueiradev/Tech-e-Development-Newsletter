@@ -25,8 +25,8 @@ export default function Editions() {
   return (
     <div className="min-h-screen bg-brand-dark flex flex-col font-sans text-brand-body">
       <Helmet>
-        <title>Arquivo de Edições | Tech & Development Newsletter</title>
-        <meta name="description" content="Explore o arquivo completo de edições passadas da Tech & Development Newsletter. As principais notícias de tecnologia e desenvolvimento." />
+        <title>Arquivo de Edições | Techndevn Newsletter</title>
+        <meta name="description" content="Explore o arquivo completo de edições passadas da Techndevn Newsletter. As principais notícias de tecnologia e desenvolvimento." />
         <link rel="canonical" href="https://techndevn.com/edicoes" />
       </Helmet>
 
@@ -34,7 +34,7 @@ export default function Editions() {
       <header className="border-b border-brand-border bg-[#0a0c10] py-6 px-4 sm:px-6 lg:px-8">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <Link to="/" className="text-xl font-heading font-bold text-white tracking-tight hover:text-brand-accent transition-colors">
-            Tech & Dev<span className="text-brand-accent">.</span>
+            Techndevn
           </Link>
           <Link to="/" className="text-sm font-medium text-brand-muted hover:text-white transition-colors">
             Voltar para a Home
@@ -76,7 +76,7 @@ export default function Editions() {
                   {new Date(edition.edition_date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
                 </div>
                 <h2 className="text-xl font-heading font-bold text-white mb-2 group-hover:text-brand-accent transition-colors">
-                  {edition.title}
+                  {edition.title?.replace(/Tech\s*(?:&|and)\s*Development\s+Newsletter/gi, 'Techndevn Newsletter') || edition.title}
                 </h2>
                 <p className="text-sm text-brand-muted line-clamp-2 mb-6">
                   {edition.description}
