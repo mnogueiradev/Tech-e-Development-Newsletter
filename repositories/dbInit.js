@@ -107,7 +107,7 @@ async function initializeDatabase(pool) {
             INSERT IGNORE INTO editions (edition_date, slug, title, description)
             SELECT DISTINCT edition_date, 
                    DATE_FORMAT(edition_date, '%Y-%m-%d') as slug,
-                   CONCAT('Tech & Development Newsletter — Edição de ', DATE_FORMAT(edition_date, '%d/%m/%Y')) as title,
+                   CONCAT('Techndevn Newsletter — Edição de ', DATE_FORMAT(edition_date, '%d/%m/%Y')) as title,
                    'As principais notícias de tecnologia e desenvolvimento curadas pela nossa IA.' as description
             FROM edition_selections
         `);
