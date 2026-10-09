@@ -128,7 +128,7 @@ const subscribeLimiter = rateLimit({
 
 // Rota de health check para o Render detectar o serviço
 app.get('/api', (req, res) => {
-    res.json({ status: 'ok', message: 'API Tech & Development Newsletter rodando!' });
+    res.json({ status: 'ok', message: 'API Techndevn Newsletter rodando!' });
 });
 
 app.post('/subscribe', subscribeLimiter, async (req, res) => {
@@ -674,7 +674,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
 
         <div style="padding: 20px; text-align: center; font-size: 12px; color: #000000;">
             <p>Enviado por ${FROM_EMAIL}</p>
-            <p>© ${new Date().getFullYear()} Tech & Development Newsletter. Todos os direitos reservados.</p>
+            <p>© ${new Date().getFullYear()} Techndevn Newsletter. Todos os direitos reservados.</p>
         </div>
     </div>
     `;
@@ -737,7 +737,7 @@ async function processAndSendNewsletter(tz = null) {
                 return Sender.net.emails.send({
                     from: FROM_EMAIL,
                     to: email,
-                    subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
+                    subject: `${topic === 'financas' ? 'Techndevn Finanças' : 'Techndevn'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                     html: htmlContent
                 });
             });
@@ -795,7 +795,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         const sendResult = await Sender.net.emails.send({
             from: FROM_EMAIL,
             to: email,
-            subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
+            subject: 'Bem-vindo(a) ao Techndevn Newsletter!',
             html: htmlContent
         });
 
