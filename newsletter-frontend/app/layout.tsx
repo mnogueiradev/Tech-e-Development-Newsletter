@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tech Newsletter - Receba as principais notícias de tecnologia",
+  title: "Techndevn — Receba as principais notícias de tecnologia",
   description:
     "Receba diariamente as principais notícias de tecnologia e desenvolvimento direto no seu email.",
 };
