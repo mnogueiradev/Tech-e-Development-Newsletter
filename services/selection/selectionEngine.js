@@ -17,7 +17,7 @@ class SelectionEngine {
     async runDailySelection(dryRun = false) {
         console.log(`\n[SELECTION_ENGINE] 🎩 Iniciando seleção editorial para a newsletter de hoje.`);
         
-        // 1. Busca um pacote generoso de Top News (ex: as 30 melhores)
+        // 1. Busca um pacote amplo de candidatas para compensar anúncios descartados
         // Isso nos dá opções para rejeitar algumas e continuar preenchendo a lista
         const candidates = await this.newsRepo.getTopNews(100);
 
