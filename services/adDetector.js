@@ -1,15 +1,18 @@
 const DISCLOSURE_PATTERNS = [
-    /^\s*(?:\[|\()?\s*(?:ad|sponsored|advertisement|advertorial|publipost|publi)\b\s*(?:\]|\))?\s*[:|—-]/,
-    /\b(?:sponsored|paid)\s+(?:content|post|article|story)\b/,
+    /^\s*(?:\[(?:ad|sponsored|advertisement|advertorial|publipost|publi)\]|\((?:ad|sponsored|advertisement|advertorial|publipost|publi)\)|(?:ad|sponsored|advertisement|advertorial|publipost|publi)\s*[:|—-])/,
+    /\b(?:sponsored|paid|partner)\s+(?:content|post|article|story)\b/,
+    /\b(?:sponsored|presented|brought\s+to\s+you)\s+by\b/,
     /\b(?:this|the)\s+(?:content|post|article|story)\s+(?:is|was)\s+(?:sponsored|paid)\b/,
-    /\bpaid\s+partnership\b/,
+    /\bpaid\s+partnership\b|\bin\s+partnership\s+with\b/,
     /\badvertorial\b|\badvertisement\b|\bbrand\s+content\b/,
-    /\bconteudo\s+(?:patrocinado|pago|de\s+marca)\b/,
+    /\bconteudo\s+(?:patrocinado|pago|de\s+marca|em\s+parceria\s+com)\b/,
     /\b(?:post|artigo|material)\s+(?:patrocinado|publicitario)\b/,
     /\bpublieditorial\b|\bpublipost\b/,
     /\bparceria\s+(?:paga|patrocinada)\b/,
-    /\bpatrocinad[oa]\s+por\b/,
-    /#publi\b/
+    /\bpatrocinad[oa]\s+por\b|\bproduzido\s+em\s+parceria\s+com\b|\bconteudo\s+oferecido\s+por\b/,
+    /^\s*(?:press|news)\s+release\b/,
+    /^\s*comunicado\s+de\s+imprensa\b/,
+    /#(?:publi|ad)\b/
 ];
 
 const PROMOTION_TERMS = [
@@ -56,6 +59,7 @@ function normalize(value) {
 
 function classifyAdvertisement(item = {}) {
     const title = normalize(item.title);
+    const sourceName = normalize(item.source_name || item.source || '');
     const summary = normalize([
         item.description,
         item.summary,
@@ -71,6 +75,15 @@ function classifyAdvertisement(item = {}) {
     const disclosure = DISCLOSURE_PATTERNS.find(pattern => pattern.test(disclosureText));
     if (disclosure) {
         return { isAdvertisement: true, reasons: ['disclosure of sponsored or paid content'] };
+    }
+
+    const articleText = [title, summary, body].join(' ');
+    if (/\\b(?:affiliate\\s+links?|may\\s+earn\\s+(?:a\\s+)?commission|commission\\s+when\\s+you\\s+(?:buy|purchase)|links?\\s+de\\s+afiliados|podemos\\s+receber\\s+comissao|ganhamos\\s+comissao)\\b/.test(articleText)) {
+        return { isAdvertisement: true, reasons: ['affiliate or commission disclosure'] };
+    }
+
+    if (/\\bhacker\\s+news\\b/.test(sourceName) && /^\\s*(?:show\\s+hn|ask\\s+hn)\\s*:/i.test(title)) {
+        return { isAdvertisement: true, reasons: ['self-promotional community post'] };
     }
 
     if (/\b(?:sponsored|advertising|advertisement|advertorial|promoted|publipost|publi)\b/.test(labels)) {
