@@ -991,22 +991,22 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     const renderNewsItem = (item) => `
         <div style="margin-bottom: 30px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             ${item.image ? `<a href="${item.link}" target="_blank" style="display: block; text-decoration: none;"><img src="${item.image}" alt="Imagem da notícia" style="width: 100%; height: 200px; object-fit: cover; display: block; border-bottom: 1px solid #e2e8f0;" onerror="this.onerror=null; this.src='https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png';"></a>` : ''}
-            <div style="padding: 24px;">
-                <h3 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.4;">
+            <div class="news-copy" style="padding: 24px;">
+                <h3 class="news-title" style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.4;">
                     <a href="${item.link}" target="_blank" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
                 </h3>
                 ${item.description ? `<p style="margin: 0 0 20px 0; font-size: 15px; color: #475569; line-height: 1.6;">${escapeHtml(item.description)}</p>` : ''}
-                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 8px;">
+                <table class="news-actions" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 8px;">
                     <tr>
-                        <td align="left" valign="middle" style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                        <td class="news-source" align="left" valign="middle" style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
                             ${escapeHtml(item.source)}
                         </td>
-                        <td align="right" valign="middle">
+                        <td class="news-buttons" align="right" valign="middle">
                             ${item.id ? `
-                                <a href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=up" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 6px; border: 1px solid #cbd5e1;" title="Gostei desta notícia">👍</a>
-                                <a href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=down" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 12px; border: 1px solid #cbd5e1;" title="Não gostei desta notícia">👎</a>
+                                <a class="news-vote" href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=up" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 6px; border: 1px solid #cbd5e1;" title="Gostei desta notícia">👍</a>
+                                <a class="news-vote" href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=down" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 12px; border: 1px solid #cbd5e1;" title="Não gostei desta notícia">👎</a>
                             ` : ''}
-                            <a href="${item.link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">Ler mais</a>
+                            <a class="news-read-more" href="${item.link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">Ler mais</a>
                         </td>
                     </tr>
                 </table>
@@ -1015,7 +1015,21 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     `;
 
     return `
-    <div style="background-color: #f8fafc; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155;">
+    <style type="text/css">
+        @media only screen and (max-width: 600px) {
+            .email-outer { padding: 16px 8px !important; }
+            .email-content { padding: 24px 16px !important; }
+            .news-copy { padding: 18px !important; }
+            .news-title { font-size: 20px !important; line-height: 1.35 !important; }
+            .news-actions { margin-top: 12px !important; }
+            .news-source, .news-buttons { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+            .news-source { padding-bottom: 12px !important; text-align: left !important; }
+            .news-buttons { text-align: left !important; white-space: nowrap !important; }
+            .news-vote { padding: 7px 10px !important; margin-right: 5px !important; }
+            .news-read-more { padding: 9px 14px !important; white-space: nowrap !important; }
+        }
+    </style>
+    <div class="email-outer" style="background-color: #f8fafc; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155;">
         <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
             
             <!-- Banner Header -->
@@ -1023,7 +1037,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
                 <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png" alt="Newsletter Banner" style="width: 100%; max-width: 600px; height: auto; display: block;">
             </div>
 
-            <div style="padding: 40px 30px; background-color: #f8fafc;">
+            <div class="email-content" style="padding: 40px 30px; background-color: #f8fafc;">
                 <h2 style="color: #0f172a; text-align: center; margin-top: 0; margin-bottom: 8px; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">${topic === 'financas' ? 'Sua Dose de Finanças' : 'Sua Dose de Tecnologia'}</h2>
                 <p style="text-align: center; color: #64748b; margin-bottom: 40px; font-size: 16px;">Aqui estão as notícias mais quentes de hoje, curadas para você.</p>
 
