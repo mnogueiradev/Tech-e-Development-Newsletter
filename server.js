@@ -1042,13 +1042,25 @@ async function getNewsletterItems(topic) {
     const SelectionEngine = require('./services/selection/selectionEngine');
     const selectionRepo = new SelectionRepository(pool);
     
+    const { classifyAdvertisement } = require('./services/adDetector');
+    const filterAdvertisements = (items, context) => (items || []).filter(item => {
+        const decision = classifyAdvertisement(item);
+        if (decision.isAdvertisement) {
+            console.log(`[NEWSLETTER] Conteúdo promocional removido (${context}): ${item.title} — ${decision.reasons.join(', ')}`);
+            return false;
+        }
+        return true;
+    });
+
     let rawItems = await selectionRepo.getTodaySelections();
-    
-    // Se não houver seleção gerada hoje
-    if (!rawItems || rawItems.length === 0) {
-        console.log('[NEWSLETTER] Nenhuma seleção encontrada para hoje. Gerando automaticamente...');
+    const savedSelectionCount = (rawItems || []).length;
+    rawItems = filterAdvertisements(rawItems, 'seleção existente');
+
+    // Gera ou atualiza a seleção se ainda não existir ou se a seleção salva continha anúncios.
+    if (rawItems.length === 0 || rawItems.length < savedSelectionCount) {
+        console.log('[NEWSLETTER] Gerando uma seleção sem conteúdo promocional...');
         const engine = new SelectionEngine(pool);
-        rawItems = await engine.runDailySelection(false); 
+        rawItems = filterAdvertisements(await engine.runDailySelection(false), 'nova seleção');
     }
     
     let filteredItems = rawItems;
@@ -1059,7 +1071,7 @@ async function getNewsletterItems(topic) {
             console.log(`[NEWSLETTER] Nenhuma notícia encontrada para o tópico ${topic}. Buscando do repositório...`);
             const NewsRepository = require('./repositories/newsRepository');
             const newsRepo = new NewsRepository(pool);
-            const fallback = await newsRepo.getTopNews(30);
+            const fallback = filterAdvertisements(await newsRepo.getTopNews(100), 'fallback');
             filteredItems = fallback.filter(item => item.category && item.category.toLowerCase().includes(topic.toLowerCase()));
         }
     }
