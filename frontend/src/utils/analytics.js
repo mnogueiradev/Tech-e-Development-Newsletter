@@ -1,5 +1,5 @@
 /**
- * Analytics tracking helper para Tech & Development Newsletter
+ * Analytics tracking helper para Techndevn Newsletter
  * Registra eventos na dataLayer ou fila personalizada para prontidão de analytics (GA4, Plausible, PostHog).
  */
 
