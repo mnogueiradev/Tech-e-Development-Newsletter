@@ -1021,6 +1021,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
             .email-content { padding: 24px 16px !important; }
             .news-copy { padding: 18px !important; }
             .news-title { font-size: 18px !important; line-height: 1.35 !important; }
+            .news-actions, .news-actions tbody, .news-actions tr { display: block !important; width: 100% !important; }
             .news-actions { margin-top: 12px !important; }
             .news-source { display: block !important; width: 100% !important; box-sizing: border-box !important; padding-bottom: 12px !important; text-align: left !important; }
             .news-buttons { display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; width: 100% !important; box-sizing: border-box !important; text-align: left !important; white-space: normal !important; }
