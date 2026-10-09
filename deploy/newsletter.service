@@ -1,5 +1,5 @@
 [Unit]
-Description=Tech & Development Newsletter (Node.js)
+Description=Techndevn Newsletter (Node.js)
 After=network.target
 
 [Service]
