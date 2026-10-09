@@ -7,11 +7,11 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center">
             <span className="text-lg font-heading font-bold text-white tracking-tight">
-              Tech & Dev<span className="text-brand-accent">.</span>
+              Techndevn
             </span>
           </div>
           <p className="text-sm text-brand-muted">
-            &copy; {currentYear} Tech & Development Newsletter.
+            &copy; {currentYear} Techndevn Newsletter.
           </p>
         </div>
       </div>
