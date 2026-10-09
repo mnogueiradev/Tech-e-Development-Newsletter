@@ -100,7 +100,8 @@ function classifyAdvertisement(item = {}) {
     }
 
     const salesCopy = [title, summary].join(' ');
-    const directCall = DIRECT_CALLS_TO_BUY.some(pattern => pattern.test(salesCopy));
+    const articleSalesCopy = [salesCopy, body.slice(0, 5000)].join(' ');
+    const directCall = DIRECT_CALLS_TO_BUY.some(pattern => pattern.test(articleSalesCopy));
     const promotionTermCount = PROMOTION_TERMS.filter(pattern => pattern.test(salesCopy)).length;
     if (directCall || promotionTermCount >= 2) {
         return { isAdvertisement: true, reasons: ['purchase call-to-action or repeated sales language'] };
