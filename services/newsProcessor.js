@@ -5,11 +5,18 @@ const LogRepository = require('../repositories/logRepository');
 const ValidationService = require('./validationService');
 const ScoreEngine = require('./scoring/scoreEngine');
 const ImageExtractor = require('./imageExtractor');
+const { classifyAdvertisement } = require('./adDetector');
 
 /**
  * Processa uma única notícia, sanitiza, verifica duplicação e salva
  */
 async function processAndSaveItem(newsRepo, rawItem, recentNewsList) {
+    const adDecision = classifyAdvertisement(rawItem);
+    if (adDecision.isAdvertisement) {
+        console.log(`[AD_FILTER] 🚫 Anúncio ignorado: ${rawItem.title} (${adDecision.reasons.join(', ')})`);
+        return { status: 'advertisement', reasons: adDecision.reasons };
+    }
+
     // 1. Lógica de extração da imagem
     let main_image = null;
     if (rawItem.media && rawItem.media['$'] && rawItem.media['$'].url) {
@@ -92,6 +99,7 @@ async function runNewsCollection(pool) {
             duplicates: 0,
             errors: []
         };
+        let adsRejected = 0;
 
         try {
             // Mapeando fonte do BD para o formato que o RSS service espera
@@ -122,6 +130,7 @@ async function runNewsCollection(pool) {
                     
                     if (result.status === 'saved') logData.news_saved++;
                     else if (result.status === 'duplicate') logData.duplicates++;
+                    else if (result.status === 'advertisement') adsRejected++;
 
                 } catch (itemErr) {
                     console.error(`[PROCESSOR] ❌ Erro ao processar item de ${source.name}:`, itemErr.message);
@@ -129,6 +138,10 @@ async function runNewsCollection(pool) {
                 }
             }
             
+            if (adsRejected > 0) {
+                console.log(`[AD_FILTER] ${adsRejected} conteúdo(s) promocional(is) descartado(s) de ${source.name}.`);
+            }
+
             // Atualiza data de última coleta da fonte
             await sourceRepo.updateLastCollected(source.id);
             logData.status = logData.errors.length > 0 ? 'partial' : 'success';
