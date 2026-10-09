@@ -1,4 +1,5 @@
 const DISCLOSURE_PATTERNS = [
+    /^\s*(?:\[|\()?\s*(?:ad|sponsored|advertisement|advertorial|publipost|publi)\b\s*(?:\]|\))?\s*[:|—-]/,
     /\b(?:sponsored|paid)\s+(?:content|post|article|story)\b/,
     /\b(?:this|the)\s+(?:content|post|article|story)\s+(?:is|was)\s+(?:sponsored|paid)\b/,
     /\bpaid\s+partnership\b/,
@@ -12,8 +13,8 @@ const DISCLOSURE_PATTERNS = [
 ];
 
 const PROMOTION_TERMS = [
-    /\b(?:oferta|promocao|desconto|cupom|codigo\s+promocional|deal|sale|coupon|promo\s+code)\b/,
-    /\b(?:black\s+friday|prime\s+day|frete\s+gratis|limited[- ]time\s+offer)\b/
+    /\b(?:promocao|desconto|discount|cupom|coupon|codigo\s+promocional|promo\s+code|oferta\s+imperdivel|ofertas?\s+(?:do\s+dia|de\s+hoje)|deals?\s+roundup|daily\s+deals|on\s+sale)\b/,
+    /\b(?:black\s+friday|prime\s+day|frete\s+gratis|limited[- ]time\s+offer|flash\s+sale|sale\s+(?:today|now))\b/
 ];
 
 const DIRECT_CALLS_TO_BUY = [
@@ -70,6 +71,10 @@ function classifyAdvertisement(item = {}) {
     const disclosure = DISCLOSURE_PATTERNS.find(pattern => pattern.test(disclosureText));
     if (disclosure) {
         return { isAdvertisement: true, reasons: ['disclosure of sponsored or paid content'] };
+    }
+
+    if (/\b(?:sponsored|advertising|advertisement|advertorial|promoted|publipost|publi)\b/.test(labels)) {
+        return { isAdvertisement: true, reasons: ['advertising label in feed metadata'] };
     }
 
     if (/\/(?:sponsored|advertorial|paid-content|brand-studio)(?:\/|$)/.test(link)) {
