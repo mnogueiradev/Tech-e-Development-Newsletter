@@ -11,7 +11,7 @@ APP_DIR="/opt/newsletter"
 LOG_DIR="/var/log/newsletter"
 SERVICE_USER="${SUDO_USER:-opc}"
 
-echo "=== Tech & Development Newsletter — Setup Oracle Cloud ==="
+echo "=== Techndevn Newsletter — Setup Oracle Cloud ==="
 
 # 1. Diretório de logs
 sudo mkdir -p "$LOG_DIR"
