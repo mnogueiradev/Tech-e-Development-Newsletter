@@ -177,7 +177,7 @@ const subscribeLimiter = rateLimit({
 
 // Rota de health check para o Render detectar o serviço
 app.get('/api', (req, res) => {
-    res.json({ status: 'ok', message: 'API Tech & Development Newsletter rodando!' });
+    res.json({ status: 'ok', message: 'API Techndevn Newsletter rodando!' });
 });
 
 app.post('/subscribe', subscribeLimiter, async (req, res) => {
@@ -689,7 +689,7 @@ const renderUnsubscribeConfirmPage = (email, token, actionPath) => `
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Cancelar Inscrição - Tech & Development Newsletter</title>
+        <title>Cancelar Inscrição - Techndevn Newsletter</title>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
             .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 420px; text-align: center; }
@@ -704,7 +704,7 @@ const renderUnsubscribeConfirmPage = (email, token, actionPath) => `
     </head>
     <body>
         <div class="card">
-            <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Tech & Dev Logo" class="logo">
+            <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Techndevn Logo" class="logo">
             <h1>Que pena ver você partir...</h1>
             <p>Tem certeza que deseja cancelar sua inscrição e parar de receber nossa curadoria de notícias no e-mail <strong>${email}</strong>?</p>
             <form action="${actionPath}" method="POST">
@@ -724,7 +724,7 @@ const renderUnsubscribeDonePage = (email) => `
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Inscrição Cancelada - Tech & Development Newsletter</title>
+        <title>Inscrição Cancelada - Techndevn Newsletter</title>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
             .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 420px; text-align: center; }
@@ -737,7 +737,7 @@ const renderUnsubscribeDonePage = (email) => `
     </head>
     <body>
         <div class="card">
-            <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Tech & Dev Logo" class="logo">
+            <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Tech-e-Development-Newsletter-main/public/image.png" alt="Techndevn Logo" class="logo">
             <h1>Inscrição Cancelada</h1>
             <p>Você não receberá mais e-mails no endereço <strong>${email}</strong>.</p>
             <p style="font-size: 14px; color: #64748b;">Foi muito bom ter você com a gente. As portas estarão sempre abertas caso decida voltar!</p>
@@ -753,7 +753,7 @@ const renderUnsubscribeNotFoundPage = () => `
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Inscrição Já Cancelada ou Link Inválido - Tech & Development Newsletter</title>
+        <title>Inscrição Já Cancelada ou Link Inválido - Techndevn Newsletter</title>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
             .card { background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); padding: 40px 30px; max-width: 440px; text-align: center; }
@@ -1030,7 +1030,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
             <div style="background-color: #ffffff; padding: 30px 20px; text-align: center; border-top: 1px solid #e2e8f0;">
                 <p style="margin: 0 0 10px 0; font-size: 14px; color: #64748b;">Enviado com ❤️ por <strong>${FROM_EMAIL}</strong></p>
                 <p style="margin: 0 0 10px 0; font-size: 13px; color: #64748b;">Deseja parar de receber nossos e-mails? <a href="{{UNSUBSCRIBE_URL}}" style="color: #2563eb; text-decoration: underline;">Cancele sua inscri&ccedil;&atilde;o aqui</a>.</p>
-                <p style="margin: 0; font-size: 12px; color: #94a3b8;">© ${new Date().getFullYear()} Tech & Development Newsletter. Todos os direitos reservados.</p>
+                <p style="margin: 0; font-size: 12px; color: #94a3b8;">© ${new Date().getFullYear()} Techndevn Newsletter. Todos os direitos reservados.</p>
             </div>
         </div>
     </div>
@@ -1165,7 +1165,7 @@ async function processAndSendNewsletter(tz = null) {
 
                     const result = await sendEmail({
                         to: sub.email,
-                        subject: `${topic === 'financas' ? 'FinanceNews' : 'TechNews'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
+                        subject: `${topic === 'financas' ? 'Techndevn Finanças' : 'Techndevn'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                         html: userHtmlContent
                     });
 
@@ -1249,7 +1249,7 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         // Envia email usando Resend
         const sendResult = await sendEmail({
             to: email,
-            subject: 'Bem-vindo(a) ao Tech & Development Newsletter!',
+            subject: 'Bem-vindo(a) ao Techndevn Newsletter!',
             html: userHtmlContent
         });
 
