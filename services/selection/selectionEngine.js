@@ -2,6 +2,7 @@ const config = require('../../config/selectionConfig');
 const EditorialRules = require('./editorialRules');
 const SelectionRepository = require('../../repositories/selectionRepository');
 const NewsRepository = require('../../repositories/newsRepository');
+const { classifyAdvertisement } = require('../adDetector');
 
 class SelectionEngine {
     constructor(pool) {
@@ -18,7 +19,7 @@ class SelectionEngine {
         
         // 1. Busca um pacote generoso de Top News (ex: as 30 melhores)
         // Isso nos dá opções para rejeitar algumas e continuar preenchendo a lista
-        const candidates = await this.newsRepo.getTopNews(30);
+        const candidates = await this.newsRepo.getTopNews(100);
 
         if (candidates.length === 0) {
             console.log(`[SELECTION_ENGINE] ⚠️ Nenhuma notícia recente encontrada para seleção.`);
@@ -39,6 +40,13 @@ class SelectionEngine {
             if (finalSelection.length >= config.limits.maxNewsPerEdition) {
                 console.log(`[SELECTION_ENGINE] ✋ Limite de ${config.limits.maxNewsPerEdition} notícias atingido.`);
                 break;
+            }
+
+            // Descarta anúncios já armazenados antes de aplicar as regras editoriais.
+            const adDecision = classifyAdvertisement(news);
+            if (adDecision.isAdvertisement) {
+                console.log(`🚫 [ANÚNCIO REJEITADO] ${news.title} — ${adDecision.reasons.join(', ')}`);
+                continue;
             }
 
             // 3. Submete a notícia às regras editoriais (diversidade, repetição, etc)
