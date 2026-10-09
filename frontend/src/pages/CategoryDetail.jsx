@@ -115,7 +115,7 @@ export default function CategoryDetail() {
     }
 
     const canonicalUrl = `https://techndevn.com/categoria/${category.slug}`;
-    const metaTitle = `Notícias de ${category.name} | Tech & Development Newsletter`;
+    const metaTitle = `Notícias de ${category.name} | Techndevn Newsletter`;
 
     const jsonLd = {
         "@context": "https://schema.org",
@@ -125,7 +125,7 @@ export default function CategoryDetail() {
         "url": canonicalUrl,
         "publisher": {
             "@type": "Organization",
-            "name": "Tech & Development Newsletter",
+            "name": "Techndevn Newsletter",
             "logo": "https://techndevn.com/Banner.png"
         },
         "mainEntity": {
@@ -161,7 +161,7 @@ export default function CategoryDetail() {
             <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/5">
                 <div className="container mx-auto px-4 lg:px-8 h-20 flex items-center justify-between">
                     <Link to="/" className="text-2xl font-bold tracking-tight text-white hover:opacity-80 transition-opacity">
-                        Tech&<span className="text-primary">Dev</span>
+                        Techndevn
                     </Link>
                     <div className="flex items-center gap-6 text-sm font-medium text-gray-400">
                         <Link to="/categoria" className="hover:text-white transition-colors">
