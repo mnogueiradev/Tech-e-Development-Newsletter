@@ -996,16 +996,9 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
                     <a href="${item.link}" target="_blank" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
                 </h3>
                 ${item.description ? `<p style="margin: 0 0 20px 0; font-size: 15px; color: #475569; line-height: 1.6;">${escapeHtml(item.description)}</p>` : ''}
-                <table class="news-actions" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 8px;">
-                    <tr>
-                        <td class="news-source" align="left" valign="middle" style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
-                            ${escapeHtml(item.source)}
-                        </td>
-                        <td class="news-buttons" align="right" valign="middle">
-                            <a class="news-read-more" href="${item.link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">Ler mais</a>
-                        </td>
-                    </tr>
-                </table>
+                <p class="news-source" style="margin: 16px 0 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                    ${escapeHtml(item.source)}
+                </p>
             </div>
         </div>
     `;
@@ -1017,11 +1010,6 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
             .email-content { padding: 24px 16px !important; }
             .news-copy { padding: 18px !important; }
             .news-title { font-size: 18px !important; line-height: 1.35 !important; }
-            .news-actions, .news-actions tbody, .news-actions tr { display: block !important; width: 100% !important; }
-            .news-actions { margin-top: 12px !important; }
-            .news-source { display: block !important; width: 100% !important; box-sizing: border-box !important; padding-bottom: 12px !important; text-align: left !important; }
-            .news-buttons { display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; width: 100% !important; box-sizing: border-box !important; text-align: left !important; white-space: normal !important; }
-            .news-read-more { display: block !important; order: 1 !important; margin: 0 !important; padding: 9px 14px !important; white-space: nowrap !important; }
         }
     </style>
     <div class="email-outer" style="background-color: #f8fafc; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155;">
