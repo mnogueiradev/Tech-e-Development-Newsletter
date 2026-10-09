@@ -49,6 +49,7 @@ export default function EditionDetail() {
   }
 
   const { edition, items } = data;
+  const editionTitle = (edition.title || '').replace(/Tech\s*(?:&|and)\s*Development\s+Newsletter/gi, 'Techndevn Newsletter');
   const readingTime = Math.max(1, Math.ceil(items.length * 1.5));
   const formattedDate = new Date(edition.edition_date).toLocaleDateString('pt-BR', { 
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
@@ -58,18 +59,18 @@ export default function EditionDetail() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
-    "headline": edition.title,
+    "headline": editionTitle,
     "image": items.filter(i => i.main_image).map(i => i.main_image),
     "datePublished": new Date(edition.edition_date).toISOString(),
     "dateModified": new Date(edition.edition_date).toISOString(),
     "author": [{
         "@type": "Organization",
-        "name": "Tech & Development Newsletter",
+        "name": "Techndevn Newsletter",
         "url": "https://techndevn.com/"
     }],
     "publisher": {
         "@type": "Organization",
-        "name": "Tech & Development Newsletter",
+        "name": "Techndevn Newsletter",
         "logo": "https://techndevn.com/Banner.png"
     },
     "description": edition.description,
@@ -83,14 +84,14 @@ export default function EditionDetail() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col text-white selection:bg-primary/30">
       <Helmet>
-        <title>{edition.title} | Tech & Development Newsletter</title>
+        <title>{editionTitle} | Techndevn Newsletter</title>
         <meta name="description" content={edition.description} />
         <link rel="canonical" href={canonicalUrl} />
         
         {/* Open Graph */}
         <meta property="og:type" content="article" />
         <meta property="og:url" content={canonicalUrl} />
-        <meta property="og:title" content={edition.title} />
+        <meta property="og:title" content={editionTitle} />
         <meta property="og:description" content={edition.description} />
         <meta property="og:image" content={items.find(i => i.main_image)?.main_image || "https://techndevn.com/Banner.png"} />
         <meta name="twitter:card" content="summary_large_image" />
@@ -105,7 +106,7 @@ export default function EditionDetail() {
       <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/5">
         <div className="container mx-auto px-4 lg:px-8 h-20 flex items-center justify-between">
           <Link to="/" className="text-2xl font-bold tracking-tight text-white hover:opacity-80 transition-opacity">
-            Tech&<span className="text-primary">Dev</span>
+            Techndevn
           </Link>
           <div className="flex items-center gap-6 text-sm font-medium text-gray-400">
             <Link to="/categoria" className="hover:text-white transition-colors">
@@ -128,7 +129,7 @@ export default function EditionDetail() {
           <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
           <Link to="/edicoes" className="hover:text-white transition-colors">Arquivo de Edições</Link>
           <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
-          <span className="text-primary font-semibold truncate">{edition.title}</span>
+          <span className="text-primary font-semibold truncate">{editionTitle}</span>
         </nav>
 
         {/* Edition Header */}
@@ -137,7 +138,7 @@ export default function EditionDetail() {
             {formattedDate}
           </div>
           <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight mb-6 leading-tight">
-            {edition.title}
+            {editionTitle}
           </h1>
           <p className="text-lg text-gray-400 mb-8 max-w-2xl mx-auto leading-relaxed">
             {edition.description}
