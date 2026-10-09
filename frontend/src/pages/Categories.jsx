@@ -38,12 +38,12 @@ export default function Categories() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    "name": "Hubs Editoriais de Tecnologia | Tech & Development Newsletter",
+    "name": "Hubs Editoriais de Tecnologia | Techndevn Newsletter",
     "description": "Explore notícias curadas por verticais temáticas: IA, Cibersegurança, Desenvolvimento, Cloud Computing, Startups, Hardware, Mobile e DevOps.",
     "url": "https://techndevn.com/categoria",
     "publisher": {
       "@type": "Organization",
-      "name": "Tech & Development Newsletter",
+      "name": "Techndevn Newsletter",
       "logo": "https://techndevn.com/Banner.png"
     }
   };
@@ -51,10 +51,10 @@ export default function Categories() {
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0a] text-white selection:bg-primary/30">
       <Helmet>
-        <title>Hubs Editoriais de Tecnologia | Tech & Development Newsletter</title>
+        <title>Hubs Editoriais de Tecnologia | Techndevn Newsletter</title>
         <meta name="description" content="Navegue pelas verticais de IA, Cibersegurança, Desenvolvimento de Software, Cloud Computing, Startups, Hardware, Mobile e DevOps." />
         <link rel="canonical" href="https://techndevn.com/categoria" />
-        <meta property="og:title" content="Hubs Editoriais de Tecnologia | Tech & Development Newsletter" />
+        <meta property="og:title" content="Hubs Editoriais de Tecnologia | Techndevn Newsletter" />
         <meta property="og:description" content="Exploração técnica por categorias: notícias, tendências e análises curadas sobre desenvolvimento e inovação." />
         <meta property="og:url" content="https://techndevn.com/categoria" />
         <meta property="og:type" content="website" />
@@ -67,7 +67,7 @@ export default function Categories() {
       <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/5">
         <div className="container mx-auto px-4 lg:px-8 h-20 flex items-center justify-between">
           <Link to="/" className="text-2xl font-bold tracking-tight text-white hover:opacity-80 transition-opacity">
-            Tech&<span className="text-primary">Dev</span>
+            Techndevn
           </Link>
           <div className="flex items-center gap-6 text-sm font-medium text-gray-400">
             <Link to="/edicoes" className="hover:text-white transition-colors">
