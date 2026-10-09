@@ -30,7 +30,7 @@ class SelectionRepository {
 
             // Garante que a edição pública correspondente existe na tabela editions
             const [dateYear, dateMonth, dateDay] = todayStr.split('-');
-            const title = `Tech & Development Newsletter — Edição de ${dateDay}/${dateMonth}/${dateYear}`;
+            const title = `Techndevn Newsletter — Edição de ${dateDay}/${dateMonth}/${dateYear}`;
             await this.pool.execute(
                 `INSERT IGNORE INTO editions (edition_date, slug, title, description)
                  VALUES (?, ?, ?, ?)`,
