@@ -1003,8 +1003,8 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
                         </td>
                         <td class="news-buttons" align="right" valign="middle">
                             ${item.id ? `
-                                <a class="news-vote" href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=up" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 6px; border: 1px solid #cbd5e1;" title="Gostei desta notícia">👍</a>
-                                <a class="news-vote" href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=down" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 12px; border: 1px solid #cbd5e1;" title="Não gostei desta notícia">👎</a>
+                                <a class="news-vote news-vote-up" href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=up" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 6px; border: 1px solid #cbd5e1;" title="Gostei desta notícia">👍</a>
+                                <a class="news-vote news-vote-down" href="{{PUBLIC_URL}}/api/feedback?news=${item.id}&sub={{SUBSCRIBER_TOKEN}}&vote=down" target="_blank" style="display: inline-block; background-color: #f1f5f9; color: #0f172a; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 6px; margin-right: 12px; border: 1px solid #cbd5e1;" title="Não gostei desta notícia">👎</a>
                             ` : ''}
                             <a class="news-read-more" href="${item.link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">Ler mais</a>
                         </td>
@@ -1020,13 +1020,14 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
             .email-outer { padding: 16px 8px !important; }
             .email-content { padding: 24px 16px !important; }
             .news-copy { padding: 18px !important; }
-            .news-title { font-size: 20px !important; line-height: 1.35 !important; }
+            .news-title { font-size: 18px !important; line-height: 1.35 !important; }
             .news-actions { margin-top: 12px !important; }
-            .news-source, .news-buttons { display: block !important; width: 100% !important; box-sizing: border-box !important; }
-            .news-source { padding-bottom: 12px !important; text-align: left !important; }
-            .news-buttons { text-align: left !important; white-space: nowrap !important; }
-            .news-vote { padding: 7px 10px !important; margin-right: 5px !important; }
-            .news-read-more { padding: 9px 14px !important; white-space: nowrap !important; }
+            .news-source { display: block !important; width: 100% !important; box-sizing: border-box !important; padding-bottom: 12px !important; text-align: left !important; }
+            .news-buttons { display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; width: 100% !important; box-sizing: border-box !important; text-align: left !important; white-space: normal !important; }
+            .news-read-more, .news-vote { display: block !important; order: 0 !important; margin: 0 !important; white-space: nowrap !important; }
+            .news-read-more { order: 1 !important; padding: 9px 14px !important; }
+            .news-vote-up { order: 2 !important; padding: 7px 12px !important; text-align: center !important; }
+            .news-vote-down { order: 3 !important; padding: 7px 12px !important; text-align: center !important; }
         }
     </style>
     <div class="email-outer" style="background-color: #f8fafc; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155;">
