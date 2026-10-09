@@ -78,11 +78,11 @@ function classifyAdvertisement(item = {}) {
     }
 
     const articleText = [title, summary, body].join(' ');
-    if (/\\b(?:affiliate\\s+links?|may\\s+earn\\s+(?:a\\s+)?commission|commission\\s+when\\s+you\\s+(?:buy|purchase)|links?\\s+de\\s+afiliados|podemos\\s+receber\\s+comissao|ganhamos\\s+comissao)\\b/.test(articleText)) {
+    if (/\b(?:affiliate\s+links?|may\s+earn\s+(?:a\s+)?commission|commission\s+when\s+you\s+(?:buy|purchase)|links?\s+de\s+afiliados|podemos\s+receber\s+comissao|ganhamos\s+comissao)\b/.test(articleText)) {
         return { isAdvertisement: true, reasons: ['affiliate or commission disclosure'] };
     }
 
-    if (/\\bhacker\\s+news\\b/.test(sourceName) && /^\\s*(?:show\\s+hn|ask\\s+hn)\\s*:/i.test(title)) {
+    if (/\bhacker\s+news\b/.test(sourceName) && /^\s*(?:show\s+hn|ask\s+hn)\s*:/i.test(title)) {
         return { isAdvertisement: true, reasons: ['self-promotional community post'] };
     }
 
