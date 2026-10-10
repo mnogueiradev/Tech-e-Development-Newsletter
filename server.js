@@ -1058,6 +1058,17 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     `;
 }
 
+function formatNewsletterItems(items) {
+    return (items || []).slice(0, 9).map(item => ({
+        id: item.id || item.news_id,
+        title: item.title,
+        link: item.original_link || item.link || '#',
+        description: item.description || '',
+        image: item.main_image || item.image || null,
+        source: item.source_name || item.source || 'Fonte Desconhecida'
+    }));
+}
+
 async function getNewsletterItems(topic) {
     const SelectionRepository = require('./repositories/selectionRepository');
     const SelectionEngine = require('./services/selection/selectionEngine');
@@ -1097,14 +1108,7 @@ async function getNewsletterItems(topic) {
         }
     }
     
-    return filteredItems.slice(0, 9).map(item => ({
-        id: item.id || item.news_id,
-        title: item.title,
-        link: item.original_link || item.link || '#',
-        description: item.description || '',
-        image: item.main_image || item.image || null,
-        source: item.source_name || item.source || 'Fonte Desconhecida'
-    }));
+    return formatNewsletterItems(filteredItems);
 }
 
 async function processAndSendNewsletter(tz = null) {
@@ -1115,7 +1119,7 @@ async function processAndSendNewsletter(tz = null) {
 
     // 3. Buscar inscritos
     try {
-        let query = `SELECT email, topic, token FROM subscribers`;
+        let query = `SELECT id, email, topic, token FROM subscribers`;
         let params = [];
         if (tz) {
             query += ` WHERE timezone = ?`;
@@ -1143,31 +1147,75 @@ async function processAndSendNewsletter(tz = null) {
                 const emails = subscribers.map(s => s.email);
                 console.log(`Processando tópico '${topic}' para ${subscribers.length} inscrito(s): ${emails.join(', ')}`);
 
-                // Obter notícias do banco de dados (V2)
-                let newsBR = await getNewsletterItems(topic);
+                // A edição editorial é comum; o perfil individual só altera a seleção após feedback.
+                const sharedNews = await getNewsletterItems(topic);
+                console.log(`📰 Notícias base preparadas para '${topic}': ${sharedNews.length} itens`);
 
-                console.log(`📰 Notícias preparadas para '${topic}': ${newsBR.length} itens`);
-
-                if (!newsBR || newsBR.length === 0) {
-                    // Nunca enviar e-mail vazio: aborta só este tópico e segue para o próximo
+                if (!sharedNews || sharedNews.length === 0) {
                     const aviso = `[NEWSLETTER] ⚠️ 0 notícias para o tópico ${topic} — envio abortado para este tópico`;
                     console.log(aviso);
                     resumo.errors.push(aviso);
                     continue;
                 }
 
-                newsBR = await translateNewsItems(newsBR);
+                const NewsRepository = require('./repositories/newsRepository');
+                const FeedbackRepository = require('./repositories/feedbackRepository');
+                const SelectionEngine = require('./services/selection/selectionEngine');
+                const newsRepo = new NewsRepository(pool);
+                const feedbackRepo = new FeedbackRepository(pool);
+                const candidatePool = await newsRepo.getTopNews(100);
+                const profiles = await feedbackRepo.getPersonalizationProfiles(
+                    subscribers.map(subscriber => subscriber.id),
+                    candidatePool.map(item => item.id)
+                );
+                const personalizationEngine = new SelectionEngine(pool);
 
-                const htmlContent = buildEmailHtml(newsBR, topic);
+                // Cada notícia é traduzida uma vez por lote, mesmo quando aparece em várias edições pessoais.
+                const translationCache = new Map();
+                const translateForEdition = async (items) => {
+                    const translated = [];
+                    for (const item of items) {
+                        const cacheKey = String(item.id || item.link || item.title);
+                        if (!translationCache.has(cacheKey)) {
+                            const [translatedItem] = await translateNewsItems([item]);
+                            translationCache.set(cacheKey, translatedItem || item);
+                        }
+                        translated.push(translationCache.get(cacheKey));
+                    }
+                    return translated;
+                };
 
-                // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
-                console.log('Enviando newsletters com FROM=', FROM_EMAIL);
+                console.log('Enviando newsletters individualmente com FROM=', FROM_EMAIL);
                 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
-
-                // Envio SEQUENCIAL (um inscrito por vez) para respeitar o rate limit do Resend (10 req/s)
                 const results = [];
+
                 for (let i = 0; i < subscribers.length; i++) {
                     const sub = subscribers[i];
+                    const profile = profiles[String(sub.id)];
+                    let recipientNews = sharedNews;
+
+                    if (profile && profile.hasFeedback) {
+                        const personalizedSelection = await personalizationEngine.runPersonalizedSelection(
+                            profile.sourcePreferences,
+                            profile.downvotedNewsIds,
+                            topic !== 'tecnologia' ? topic : null,
+                            candidatePool
+                        );
+
+                        if (personalizedSelection.length > 0) {
+                            recipientNews = formatNewsletterItems(personalizedSelection);
+                            console.log(`[PERSONALIZAÇÃO] Edição ajustada para inscrito #${sub.id}: ${personalizedSelection.length} notícias.`);
+                        } else {
+                            const downvotedIds = new Set(profile.downvotedNewsIds.map(Number));
+                            const alternatives = sharedNews.filter(item => !downvotedIds.has(Number(item.id)));
+                            if (alternatives.length > 0) recipientNews = alternatives;
+                            console.warn(`[PERSONALIZAÇÃO] Sem candidatas suficientes para o inscrito #${sub.id}; usando a seleção compartilhada disponível.`);
+                        }
+                    }
+
+                    const translatedNews = await translateForEdition(recipientNews);
+                    const htmlContent = buildEmailHtml(translatedNews, topic);
+
                     let subToken = sub.token;
                     if (!subToken) {
                         subToken = randomUUID();
@@ -1178,6 +1226,7 @@ async function processAndSendNewsletter(tz = null) {
                             console.error('[NEWSLETTER] Erro ao persistir token UUID permanente:', sub.email, tokenErr);
                         }
                     }
+
                     const userUnsubscribeUrl = `${PUBLIC_URL}/unsubscribe?token=${subToken}`;
                     const userHtmlContent = htmlContent
                         .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, userUnsubscribeUrl)
@@ -1217,7 +1266,6 @@ async function processAndSendNewsletter(tz = null) {
                     console.log(`Newsletter '${topic}' enviada com sucesso para ${emails.length} inscritos!`);
                 }
             } catch (err) {
-                // Uma falha no tópico não pode abortar os demais tópicos
                 console.error(`Erro ao processar o tópico '${topic}':`, err);
                 resumo.errors.push(`Tópico '${topic}': ${err && err.message ? err.message : err}`);
             }

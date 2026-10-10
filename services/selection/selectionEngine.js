@@ -12,6 +12,65 @@ class SelectionEngine {
     }
 
     /**
+     * Cria uma edição privada a partir das mesmas candidatas editoriais.
+     * Os votos alteram a ordem por fonte, e notícias rejeitadas pelo leitor
+     * não voltam a aparecer enquanto ainda estiverem entre as candidatas.
+     */
+    async runPersonalizedSelection(sourcePreferences = {}, excludedNewsIds = [], categoryFilter = null, candidatePool = null) {
+        const candidates = Array.isArray(candidatePool) ? candidatePool : await this.newsRepo.getTopNews(100);
+        const excludedIds = new Set((excludedNewsIds || []).map(Number));
+        const normalizedCategory = String(categoryFilter || '').trim().toLowerCase();
+        const rankedCandidates = [];
+
+        candidates.forEach((news, originalPosition) => {
+            if (!news || excludedIds.has(Number(news.id))) return;
+            if (classifyAdvertisement(news).isAdvertisement) return;
+            if (normalizedCategory && !String(news.category || '').toLowerCase().includes(normalizedCategory)) return;
+
+            const sourcePreference = sourcePreferences[String(news.source_id)] || {};
+            const weightedUp = Number(sourcePreference.weightedUp || 0);
+            const weightedDown = Number(sourcePreference.weightedDown || 0);
+            const affinity = (weightedUp - weightedDown) / (1 + weightedUp + weightedDown);
+            const score = Number(news.score || 0);
+            const personalizedScore = score * (1 + affinity * 0.8);
+
+            rankedCandidates.push({
+                news: { ...news },
+                originalPosition,
+                affinity,
+                personalizedScore
+            });
+        });
+
+        rankedCandidates.sort((a, b) =>
+            b.personalizedScore - a.personalizedScore ||
+            Number(b.news.score || 0) - Number(a.news.score || 0) ||
+            new Date(b.news.publication_date || 0) - new Date(a.news.publication_date || 0) ||
+            a.originalPosition - b.originalPosition
+        );
+
+        this.rules.reset();
+        const finalSelection = [];
+
+        for (const candidate of rankedCandidates) {
+            if (finalSelection.length >= config.limits.maxNewsPerEdition) break;
+
+            // Um saldo negativo reduz o teto da fonte de duas notícias para uma.
+            const sourceLimit = candidate.affinity < 0
+                ? Math.max(1, config.limits.maxPerSource - 1)
+                : config.limits.maxPerSource;
+            const evaluation = this.rules.evaluate(candidate.news, sourceLimit);
+            if (!evaluation.passed) continue;
+
+            candidate.news.selectionReason = evaluation.reason;
+            this.rules.registerSelection(candidate.news);
+            finalSelection.push(candidate.news);
+        }
+
+        return finalSelection;
+    }
+
+    /**
      * Roda o algoritmo de curadoria para montar a newsletter do dia
      */
     async runDailySelection(dryRun = false) {

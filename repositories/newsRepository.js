@@ -79,7 +79,7 @@ class NewsRepository {
                 limit = 10;
             }
             const [rows] = await this.pool.execute(
-                `SELECT n.id, n.title, n.description, s.name as source_name, n.original_link, n.score, 
+                `SELECT n.id, n.source_id, n.title, n.description, s.name as source_name, n.original_link, n.score, 
                         n.publication_date, n.status, n.tags, n.category, n.main_image, n.author
                  FROM news_v2 n
                  LEFT JOIN news_sources s ON n.source_id = s.id

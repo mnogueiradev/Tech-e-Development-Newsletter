@@ -22,6 +22,75 @@ class FeedbackRepository {
     }
 
     /**
+     * Monta preferências individuais por fonte. Os votos recentes têm mais peso,
+     * e votos negativos de notícias candidatas evitam que o mesmo link reapareça.
+     */
+    async getPersonalizationProfiles(subscriberIds, candidateNewsIds = []) {
+        const ids = [...new Set((subscriberIds || [])
+            .map(Number)
+            .filter(id => Number.isSafeInteger(id) && id > 0))];
+        const profiles = Object.create(null);
+        if (ids.length === 0) return profiles;
+
+        const subscriberPlaceholders = ids.map(() => '?').join(',');
+        try {
+            const [preferenceRows] = await this.pool.execute(
+                `SELECT f.subscriber_id, n.source_id,
+                        SUM(CASE WHEN f.vote = 'up' THEN POWER(0.5, GREATEST(TIMESTAMPDIFF(DAY, f.updated_at, CURRENT_TIMESTAMP), 0) / 90.0) ELSE 0 END) AS weighted_up,
+                        SUM(CASE WHEN f.vote = 'down' THEN POWER(0.5, GREATEST(TIMESTAMPDIFF(DAY, f.updated_at, CURRENT_TIMESTAMP), 0) / 90.0) ELSE 0 END) AS weighted_down
+                 FROM news_feedback f
+                 JOIN news_v2 n ON n.id = f.news_id
+                 WHERE f.subscriber_id IN (${subscriberPlaceholders})
+                   AND n.source_id IS NOT NULL
+                 GROUP BY f.subscriber_id, n.source_id`,
+                ids
+            );
+
+            for (const row of preferenceRows) {
+                const subscriberId = String(row.subscriber_id);
+                if (!profiles[subscriberId]) {
+                    profiles[subscriberId] = { sourcePreferences: Object.create(null), downvotedNewsIds: [] };
+                }
+                profiles[subscriberId].sourcePreferences[String(row.source_id)] = {
+                    weightedUp: Number(row.weighted_up || 0),
+                    weightedDown: Number(row.weighted_down || 0)
+                };
+            }
+
+            const newsIds = [...new Set((candidateNewsIds || [])
+                .map(Number)
+                .filter(id => Number.isSafeInteger(id) && id > 0))];
+            if (newsIds.length > 0) {
+                const newsPlaceholders = newsIds.map(() => '?').join(',');
+                const [downvoteRows] = await this.pool.execute(
+                    `SELECT subscriber_id, news_id
+                     FROM news_feedback
+                     WHERE vote = 'down'
+                       AND subscriber_id IN (${subscriberPlaceholders})
+                       AND news_id IN (${newsPlaceholders})`,
+                    [...ids, ...newsIds]
+                );
+
+                for (const row of downvoteRows) {
+                    const subscriberId = String(row.subscriber_id);
+                    if (!profiles[subscriberId]) {
+                        profiles[subscriberId] = { sourcePreferences: Object.create(null), downvotedNewsIds: [] };
+                    }
+                    profiles[subscriberId].downvotedNewsIds.push(Number(row.news_id));
+                }
+            }
+
+            for (const profile of Object.values(profiles)) {
+                profile.hasFeedback = Object.keys(profile.sourcePreferences).length > 0 || profile.downvotedNewsIds.length > 0;
+            }
+            return profiles;
+        } catch (error) {
+            console.error('[FeedbackRepo] Erro ao montar perfis individuais:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Retorna a contagem de votos positivos (up) e negativos (down) de uma notícia
      */
     async getFeedbackByNews(newsId) {

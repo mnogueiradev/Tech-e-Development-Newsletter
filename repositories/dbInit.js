@@ -127,6 +127,11 @@ async function initializeDatabase(pool) {
             )
         `);
 
+        // Índice para consultar feedbacks por assinante sem varrer a tabela inteira.
+        try {
+            await pool.execute('CREATE INDEX idx_news_feedback_subscriber ON news_feedback (subscriber_id, news_id, vote, updated_at)');
+        } catch (e) { /* Índice provavelmente já existe */ }
+
         // 5. Migração/Inclusão das Fontes de Notícias no Banco
         console.log('[DB INIT] Garantindo presença das fontes de notícias padrão...');
         const defaultSources = [
