@@ -29,6 +29,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/Banner.png', express.static(path.join(__dirname, 'Banner.png')));
+app.use('/Banner.gif', express.static(path.join(__dirname, 'Banner.gif')));
 
 // Backend atua apenas como API. Não serve arquivos estáticos HTML.
 
@@ -1038,7 +1039,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
             
             <!-- Banner Header -->
             <div style="background-color: #1e293b; text-align: center;">
-                <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png" alt="Newsletter Banner" style="width: 100%; max-width: 600px; height: auto; display: block;">
+                <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.gif" alt="Newsletter Banner" style="width: 100%; max-width: 600px; height: auto; display: block;">
             </div>
 
             <div class="email-content" style="padding: 40px 30px; background-color: #f8fafc;">
