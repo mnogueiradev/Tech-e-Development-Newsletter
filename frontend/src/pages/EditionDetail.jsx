@@ -4,7 +4,6 @@ import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Clock, ExternalLink, ChevronRight, Bookmark } from 'lucide-react';
 import api from '../services/api';
 import Footer from '../components/Footer';
-import EditorialLens from '../components/EditorialLens';
 import { getCategorySlug, getCategoryName } from '../utils/categoryMap';
 import { trackEvent } from '../utils/analytics';
 
@@ -233,7 +232,6 @@ export default function EditionDetail() {
                   <p className="text-base sm:text-lg text-gray-300 leading-relaxed">
                     {item.description}
                   </p>
-                  <EditorialLens editorialLabel={item.editorialLabel} whyItMatters={item.whyItMatters} nextStep={item.nextStep} />
 
                   <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
                     <a 
