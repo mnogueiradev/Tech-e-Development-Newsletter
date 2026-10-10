@@ -988,7 +988,26 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
             .replace(/'/g, "&#039;");
     };
 
-    const renderNewsItem = (item) => `
+    const renderNewsItem = (item) => {
+        const newsId = Number(item.id);
+        const feedbackButtons = Number.isSafeInteger(newsId) && newsId > 0 ? `
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; margin-top: 16px; border-collapse: separate;">
+                <tr>
+                    <td width="50%" valign="middle" style="width: 50%; padding: 0 4px 0 0;">
+                        <a href="{{PUBLIC_URL}}/api/feedback?news=${newsId}&amp;sub={{SUBSCRIBER_TOKEN}}&amp;vote=up" aria-label="Gostei desta notícia" style="display: block; box-sizing: border-box; width: 100%; border: 1px solid #bbf7d0; border-radius: 8px; background-color: #f0fdf4; color: #166534; font-size: 13px; font-weight: 700; line-height: 18px; padding: 10px 6px; text-align: center; text-decoration: none;">
+                            👍 Gostei
+                        </a>
+                    </td>
+                    <td width="50%" valign="middle" style="width: 50%; padding: 0 0 0 4px;">
+                        <a href="{{PUBLIC_URL}}/api/feedback?news=${newsId}&amp;sub={{SUBSCRIBER_TOKEN}}&amp;vote=down" aria-label="Não gostei desta notícia" style="display: block; box-sizing: border-box; width: 100%; border: 1px solid #fecaca; border-radius: 8px; background-color: #fef2f2; color: #b91c1c; font-size: 13px; font-weight: 700; line-height: 18px; padding: 10px 6px; text-align: center; text-decoration: none;">
+                            👎 Não gostei
+                        </a>
+                    </td>
+                </tr>
+            </table>
+        ` : '';
+
+        return `
         <div style="margin-bottom: 30px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             ${item.image ? `<a href="${item.link}" target="_blank" style="display: block; text-decoration: none;"><img src="${item.image}" alt="Imagem da notícia" style="width: 100%; height: 200px; object-fit: cover; display: block; border-bottom: 1px solid #e2e8f0;" onerror="this.onerror=null; this.src='https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png';"></a>` : ''}
             <div class="news-copy" style="padding: 24px;">
@@ -999,9 +1018,11 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
                 <p class="news-source" style="margin: 16px 0 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
                     ${escapeHtml(item.source)}
                 </p>
+                ${feedbackButtons}
             </div>
         </div>
-    `;
+        `;
+    };
 
     return `
     <style type="text/css">
