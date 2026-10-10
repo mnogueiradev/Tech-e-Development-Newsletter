@@ -12,6 +12,7 @@ const { randomUUID } = crypto;
 const { initializeDatabase } = require('./repositories/dbInit');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
 const { translateNewsItems, isBrazilianSource } = require('./services/newsTranslation');
+const { getEditorialLens } = require('./services/editorialLens');
 const jwt = require('jsonwebtoken');
 
 const app = express();
@@ -487,7 +488,7 @@ app.get('/api/public/today-edition', async (req, res) => {
         res.json({
             date: todayStr,
             editionTitle,
-            items: items || []
+            items: (items || []).map(item => ({ ...item, ...getEditorialLens(item) }))
         });
     } catch (err) {
         console.error("Erro no /api/public/today-edition:", err);
@@ -528,7 +529,7 @@ app.get('/api/public/editions/:slug', async (req, res) => {
             ORDER BY es.position ASC
         `, [edition.edition_date]);
         
-        res.json({ edition, items });
+        res.json({ edition, items: items.map(item => ({ ...item, ...getEditorialLens(item) })) });
     } catch (err) {
         console.error("Erro no /api/public/editions/:slug:", err);
         res.status(500).json({ error: 'Erro ao buscar edição.' });
@@ -990,6 +991,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
 
     const renderNewsItem = (item) => {
         const newsId = Number(item.id);
+        const lens = getEditorialLens(item);
         const feedbackButtons = Number.isSafeInteger(newsId) && newsId > 0 ? `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; margin-top: 16px; border-collapse: separate;">
                 <tr>
@@ -1014,7 +1016,12 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
                 <h3 class="news-title" style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.4;">
                     <a href="${item.link}" target="_blank" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
                 </h3>
-                ${item.description ? `<p style="margin: 0 0 20px 0; font-size: 15px; color: #475569; line-height: 1.6;">${escapeHtml(item.description)}</p>` : ''}
+                ${item.description ? `<p style="margin: 0 0 6px 0; font-size: 10px; color: #2563eb; font-weight: 800; letter-spacing: 1px;">O QUE ACONTECEU</p><p style="margin: 0 0 18px 0; font-size: 15px; color: #475569; line-height: 1.6;">${escapeHtml(item.description)}</p>` : ''}
+                <div style="margin: 20px 0 4px; padding: 16px 18px; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; border-radius: 10px; background-color: #eff6ff;">
+                    <p style="margin: 0 0 12px; color: #1d4ed8; font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">✦ Lente Techndevn <span style="color: #64748b; font-weight: 600; letter-spacing: 0;">· ${escapeHtml(lens.editorialLabel)}</span></p>
+                    <p style="margin: 0 0 10px; color: #1e293b; font-size: 14px; line-height: 1.55;"><strong>Por que importa</strong><br>${escapeHtml(lens.whyItMatters)}</p>
+                    <p style="margin: 0; color: #1e293b; font-size: 14px; line-height: 1.55;"><strong>Próximo passo</strong><br>${escapeHtml(lens.nextStep)}</p>
+                </div>
                 <p class="news-source" style="margin: 16px 0 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
                     ${escapeHtml(item.source)}
                 </p>
@@ -1043,7 +1050,7 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
 
             <div class="email-content" style="padding: 40px 30px; background-color: #f8fafc;">
                 <h2 style="color: #0f172a; text-align: center; margin-top: 0; margin-bottom: 8px; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">${topic === 'financas' ? 'Sua Dose de Finanças' : 'Sua Dose de Tecnologia'}</h2>
-                <p style="text-align: center; color: #64748b; margin-bottom: 40px; font-size: 16px;">Aqui estão as notícias mais quentes de hoje, curadas para você.</p>
+                <p style="text-align: center; color: #64748b; margin-bottom: 40px; font-size: 16px;">O que aconteceu, por que importa e um próximo passo prático para você.</p>
 
                 ${newsBR.map(renderNewsItem).join('')}
             </div>
@@ -1103,7 +1110,8 @@ async function getNewsletterItems(topic) {
         link: item.original_link || item.link || '#',
         description: item.description || '',
         image: item.main_image || item.image || null,
-        source: item.source_name || item.source || 'Fonte Desconhecida'
+        source: item.source_name || item.source || 'Fonte Desconhecida',
+        category: item.category || 'desenvolvimento'
     }));
 }
 

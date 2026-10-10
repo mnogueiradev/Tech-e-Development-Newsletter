@@ -2,6 +2,7 @@ import { Clock, ExternalLink, Calendar, Bookmark } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getCategorySlug, getCategoryName } from '../utils/categoryMap';
 import { trackEvent } from '../utils/analytics';
+import EditorialLens from './EditorialLens';
 
 export default function NewsCard({ item }) {
   const slug = getCategorySlug(item.category);
@@ -96,6 +97,7 @@ export default function NewsCard({ item }) {
           <p className="text-sm md:text-base text-gray-400 line-clamp-3 leading-relaxed mb-4">
             {item.description || item.summary}
           </p>
+          <EditorialLens editorialLabel={item.editorialLabel} whyItMatters={item.whyItMatters} nextStep={item.nextStep} />
         </div>
 
         {/* Rodapé do Card: Fonte, Score e Data */}
