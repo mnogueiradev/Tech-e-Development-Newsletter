@@ -2,12 +2,14 @@ const config = require('../../config/selectionConfig');
 const EditorialRules = require('./editorialRules');
 const SelectionRepository = require('../../repositories/selectionRepository');
 const NewsRepository = require('../../repositories/newsRepository');
+const NewsletterHistoryRepository = require('../../repositories/newsletterHistoryRepository');
 const { classifyAdvertisement } = require('../adDetector');
 
 class SelectionEngine {
     constructor(pool) {
         this.selectionRepo = new SelectionRepository(pool);
         this.newsRepo = new NewsRepository(pool);
+        this.newsletterHistoryRepo = new NewsletterHistoryRepository(pool);
         this.rules = new EditorialRules();
     }
 
@@ -19,7 +21,12 @@ class SelectionEngine {
         
         // 1. Busca um pacote amplo de candidatas para compensar anúncios descartados
         // Isso nos dá opções para rejeitar algumas e continuar preenchendo a lista
-        const candidates = await this.newsRepo.getTopNews(100);
+        const previousEditionNewsIds = await this.newsletterHistoryRepo.getPreviousEditionNewsIds();
+        const candidates = await this.newsRepo.getTopNews(100, [...previousEditionNewsIds]);
+
+        if (previousEditionNewsIds.size > 0) {
+            console.log(`[SELECTION_ENGINE] 🚫 Excluindo ${previousEditionNewsIds.size} notícias da edição anterior.`);
+        }
 
         if (candidates.length === 0) {
             console.log(`[SELECTION_ENGINE] ⚠️ Nenhuma notícia recente encontrada para seleção.`);

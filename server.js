@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const { randomUUID } = crypto;
 const { initializeDatabase } = require('./repositories/dbInit');
+const NewsletterHistoryRepository = require('./repositories/newsletterHistoryRepository');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
 const { translateNewsItems, isBrazilianSource } = require('./services/newsTranslation');
 const jwt = require('jsonwebtoken');
@@ -1041,6 +1042,8 @@ async function getNewsletterItems(topic) {
     const SelectionRepository = require('./repositories/selectionRepository');
     const SelectionEngine = require('./services/selection/selectionEngine');
     const selectionRepo = new SelectionRepository(pool);
+    const newsletterHistoryRepo = new NewsletterHistoryRepository(pool);
+    const previousEditionNewsIds = await newsletterHistoryRepo.getPreviousEditionNewsIds();
     
     const { classifyAdvertisement } = require('./services/adDetector');
     const filterAdvertisements = (items, context) => (items || []).filter(item => {
@@ -1055,6 +1058,11 @@ async function getNewsletterItems(topic) {
     let rawItems = await selectionRepo.getTodaySelections();
     const savedSelectionCount = (rawItems || []).length;
     rawItems = filterAdvertisements(rawItems, 'seleção existente');
+    const previousDayFiltered = rawItems.filter(item => !previousEditionNewsIds.has(Number(item.id || item.news_id)));
+    if (previousDayFiltered.length < rawItems.length) {
+        console.log(`[NEWSLETTER] ${rawItems.length - previousDayFiltered.length} notícia(s) da edição anterior removida(s) da seleção salva.`);
+    }
+    rawItems = previousDayFiltered;
 
     // Gera ou atualiza a seleção se ainda não existir ou se a seleção salva continha anúncios.
     if (rawItems.length === 0 || rawItems.length < savedSelectionCount) {
@@ -1071,8 +1079,14 @@ async function getNewsletterItems(topic) {
             console.log(`[NEWSLETTER] Nenhuma notícia encontrada para o tópico ${topic}. Buscando do repositório...`);
             const NewsRepository = require('./repositories/newsRepository');
             const newsRepo = new NewsRepository(pool);
-            const fallback = filterAdvertisements(await newsRepo.getTopNews(100), 'fallback');
-            filteredItems = fallback.filter(item => item.category && item.category.toLowerCase().includes(topic.toLowerCase()));
+            const fallback = filterAdvertisements(
+                await newsRepo.getTopNews(100, [...previousEditionNewsIds]),
+                'fallback'
+            );
+            filteredItems = fallback.filter(item =>
+                !previousEditionNewsIds.has(Number(item.id || item.news_id)) &&
+                item.category && item.category.toLowerCase().includes(topic.toLowerCase())
+            );
         }
     }
     
@@ -1134,6 +1148,11 @@ async function processAndSendNewsletter(tz = null) {
                     resumo.errors.push(aviso);
                     continue;
                 }
+
+                // Persiste o conteúdo antes do envio: se um envio falhar parcialmente,
+                // os mesmos artigos ainda ficam bloqueados na edição seguinte.
+                const historyRepo = new NewsletterHistoryRepository(pool);
+                await historyRepo.recordEditionNews(newsBR);
 
                 newsBR = await translateNewsItems(newsBR);
 
@@ -1218,6 +1237,9 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         let newsBR = await getNewsletterItems(topic);
 
         console.log(`📰 Notícias preparadas para '${topic}': ${newsBR.length} itens`);
+
+        const historyRepo = new NewsletterHistoryRepository(pool);
+        await historyRepo.recordEditionNews(newsBR);
 
         newsBR = await translateNewsItems(newsBR);
 

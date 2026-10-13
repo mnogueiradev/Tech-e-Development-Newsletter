@@ -69,15 +69,22 @@ class NewsRepository {
     /**
      * Retorna o ranking das notícias mais relevantes do dia, ordenadas pelo score
      * @param {number} limit Quantidade de notícias a retornar
+     * @param {number[]} excludedNewsIds IDs já usados na edição anterior
      */
-    async getTopNews(limit = 10) {
+    async getTopNews(limit = 10, excludedNewsIds = []) {
         try {
             console.log(`[NewsRepo] Buscando Top News. Limite: ${limit}`);
-            const limitNum = Number(limit);
+            let limitNum = Number(limit);
             if (isNaN(limitNum) || limitNum <= 0) {
                 console.warn(`[NewsRepo] Limite inválido: ${limit}. Usando padrão 10.`);
-                limit = 10;
+                limitNum = 10;
             }
+            const excludedIds = [...new Set((excludedNewsIds || [])
+                .map(Number)
+                .filter(id => Number.isInteger(id) && id > 0))];
+            const exclusionClause = excludedIds.length > 0
+                ? `AND n.id NOT IN (${excludedIds.map(() => '?').join(', ')})`
+                : '';
             const [rows] = await this.pool.execute(
                 `SELECT n.id, n.title, n.description, s.name as source_name, n.original_link, n.score, 
                         n.publication_date, n.status, n.tags, n.category, n.main_image, n.author
@@ -85,8 +92,10 @@ class NewsRepository {
                  LEFT JOIN news_sources s ON n.source_id = s.id
                  WHERE n.publication_date >= NOW() - INTERVAL 48 HOUR 
                  AND n.status != 'rejeitada'
+                 ${exclusionClause}
                  ORDER BY n.score DESC, n.publication_date DESC 
-                 LIMIT ${limitNum}`
+                 LIMIT ${limitNum}`,
+                excludedIds
             );
             console.log(`[NewsRepo] Top News encontradas: ${rows.length}`);
             

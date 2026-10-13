@@ -90,6 +90,17 @@ async function initializeDatabase(pool) {
             )
         `);
 
+        // Registra os artigos incluídos nos emails para impedir repetição entre dias.
+        await pool.execute(`
+            CREATE TABLE IF NOT EXISTS newsletter_edition_news (
+                edition_date DATE NOT NULL,
+                news_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (edition_date, news_id),
+                FOREIGN KEY (news_id) REFERENCES news_v2(id) ON DELETE CASCADE
+            )
+        `);
+
         // 4.1 Tabela de Edições (Metadados públicos para SEO e Arquivo)
         await pool.execute(`
             CREATE TABLE IF NOT EXISTS editions (
