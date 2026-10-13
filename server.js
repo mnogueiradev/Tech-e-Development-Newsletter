@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const { randomUUID } = crypto;
 const { initializeDatabase } = require('./repositories/dbInit');
 const NewsletterHistoryRepository = require('./repositories/newsletterHistoryRepository');
+const ImageExtractor = require('./services/imageExtractor');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
 const { translateNewsItems, isBrazilianSource } = require('./services/newsTranslation');
 const jwt = require('jsonwebtoken');
@@ -1010,10 +1011,10 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
 
         return `
         <div style="margin-bottom: 30px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-            ${item.image ? `<a href="${item.link}" target="_blank" style="display: block; text-decoration: none;"><img src="${item.image}" alt="Imagem da notícia" style="width: 100%; height: 200px; object-fit: cover; display: block; border-bottom: 1px solid #e2e8f0;" onerror="this.onerror=null; this.src='https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png';"></a>` : ''}
+            ${item.image ? `<a href="${escapeHtml(item.link)}" target="_blank" style="display: block; text-decoration: none;"><img src="${escapeHtml(item.image)}" alt="" width="600" style="display: block; width: 100%; max-width: 600px; height: auto; border: 0; border-bottom: 1px solid #e2e8f0;"></a>` : ''}
             <div class="news-copy" style="padding: 24px;">
                 <h3 class="news-title" style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.4;">
-                    <a href="${item.link}" target="_blank" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
+                    <a href="${escapeHtml(item.link)}" target="_blank" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
                 </h3>
                 ${item.description ? `<p style="margin: 0 0 20px 0; font-size: 15px; color: #475569; line-height: 1.6;">${escapeHtml(item.description)}</p>` : ''}
                 <p class="news-source" style="margin: 16px 0 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
@@ -1038,9 +1039,13 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
         <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
             
             <!-- Banner Header -->
-            <div style="background-color: #1e293b; text-align: center;">
-                <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png" alt="Newsletter Banner" style="width: 100%; max-width: 600px; height: auto; display: block;">
-            </div>
+            <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td align="center" bgcolor="#1e293b" style="background-color: #1e293b; text-align: center;">
+                        <img src="https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png" alt="Techndevn Newsletter — notícias de tecnologia e desenvolvimento" width="600" height="123" style="display: block; width: 100%; max-width: 600px; height: auto; border: 0;">
+                    </td>
+                </tr>
+            </table>
 
             <div class="email-content" style="padding: 40px 30px; background-color: #f8fafc;">
                 <h2 style="color: #0f172a; text-align: center; margin-top: 0; margin-bottom: 8px; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">${topic === 'financas' ? 'Sua Dose de Finanças' : 'Sua Dose de Tecnologia'}</h2>
@@ -1067,6 +1072,43 @@ function formatNewsletterItems(items) {
         description: item.description || '',
         image: item.main_image || item.image || null,
         source: item.source_name || item.source || 'Fonte Desconhecida'
+    }));
+}
+
+function normalizeEmailImageUrl(value) {
+    if (!value || typeof value !== 'string' || !value.trim()) return null;
+
+    try {
+        const candidate = value.trim();
+        if (/^\/?banner\.png(?:[?#].*)?$/i.test(candidate)) return null;
+
+        const publicBaseUrl = process.env.PUBLIC_URL || 'https://techndevn.com';
+        const baseUrl = `${publicBaseUrl.replace(/\/+$/, '')}/`;
+        const imageUrl = new URL(candidate, baseUrl);
+
+        if (imageUrl.protocol === 'http:') imageUrl.protocol = 'https:';
+        if (imageUrl.protocol !== 'https:') return null;
+        return imageUrl.href;
+    } catch (error) {
+        return null;
+    }
+}
+
+async function prepareNewsletterImages(items, validationCache = new Map()) {
+    return Promise.all((items || []).map(async item => {
+        const imageUrl = normalizeEmailImageUrl(item.image);
+        if (!imageUrl) return { ...item, image: null };
+
+        if (!validationCache.has(imageUrl)) {
+            validationCache.set(imageUrl, ImageExtractor.isValidImageUrl(imageUrl));
+        }
+
+        const isAvailable = await validationCache.get(imageUrl);
+        if (!isAvailable) {
+            console.warn(`[NEWSLETTER] Miniatura indisponível ou incompatível; imagem omitida: ${imageUrl}`);
+        }
+
+        return { ...item, image: isAvailable ? imageUrl : null };
     }));
 }
 
@@ -1188,6 +1230,7 @@ async function processAndSendNewsletter(tz = null) {
 
                 // Cada notícia é traduzida uma vez por lote, mesmo quando aparece em várias edições pessoais.
                 const translationCache = new Map();
+                const imageValidationCache = new Map();
                 const translateForEdition = async (items) => {
                     const translated = [];
                     for (const item of items) {
@@ -1241,11 +1284,13 @@ async function processAndSendNewsletter(tz = null) {
                         continue;
                     }
 
+                    const emailNews = await prepareNewsletterImages(recipientNews, imageValidationCache);
+
                     // Registra cada edição pessoal antes do envio para impedir repetição
                     // no próximo dia, inclusive quando houver falha parcial no lote.
-                    await historyRepo.recordEditionNews(recipientNews);
+                    await historyRepo.recordEditionNews(emailNews);
 
-                    const translatedNews = await translateForEdition(recipientNews);
+                    const translatedNews = await translateForEdition(emailNews);
                     const htmlContent = buildEmailHtml(translatedNews, topic);
 
                     let subToken = sub.token;
@@ -1319,6 +1364,9 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         let newsBR = await getNewsletterItems(topic);
 
         console.log(`📰 Notícias preparadas para '${topic}': ${newsBR.length} itens`);
+
+        const imageValidationCache = new Map();
+        newsBR = await prepareNewsletterImages(newsBR, imageValidationCache);
 
         const historyRepo = new NewsletterHistoryRepository(pool);
         await historyRepo.recordEditionNews(newsBR);

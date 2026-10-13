@@ -1,32 +1,68 @@
 const cheerio = require('cheerio');
 
 class ImageExtractor {
+    static normalizeHttpsUrl(value, baseUrl = null) {
+        if (!value || typeof value !== 'string') return null;
+
+        try {
+            const url = baseUrl ? new URL(value.trim(), baseUrl) : new URL(value.trim());
+            if (url.protocol === 'http:') url.protocol = 'https:';
+            if (url.protocol !== 'https:') return null;
+            return url.href;
+        } catch (error) {
+            return null;
+        }
+    }
+
     /**
-     * Valida se uma URL de imagem é acessível e não está quebrada
+     * Confirma que a URL HTTPS responde com um formato seguro e comum em email.
+     * Alguns servidores rejeitam HEAD, então tentamos um GET com Range em seguida.
      */
     static async isValidImageUrl(url) {
-        if (!url || !url.startsWith('http')) return false;
-        
-        try {
-            // Usa fetch com timeout curto para não travar o processo
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-            
-            const response = await fetch(url, {
-                method: 'HEAD',
+        const imageUrl = this.normalizeHttpsUrl(url);
+        if (!imageUrl) return false;
+
+        const supportedTypes = new Set(['image/jpeg', 'image/png', 'image/gif']);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const checkResponse = async (method) => {
+            const response = await fetch(imageUrl, {
+                method,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'image/jpeg,image/png,image/gif,*/*;q=0.8',
+                    ...(method === 'GET' ? { Range: 'bytes=0-0' } : {})
                 },
                 signal: controller.signal
             });
-            
-            clearTimeout(timeoutId);
-            
-            // Aceita 200 OK ou qualquer redirecionamento válido
-            return response.ok || (response.status >= 300 && response.status < 400);
+
+            let finalProtocol = null;
+            try {
+                finalProtocol = new URL(response.url || imageUrl).protocol;
+            } catch (error) {
+                finalProtocol = null;
+            }
+            const contentType = String(response.headers.get('content-type') || '')
+                .split(';')[0]
+                .trim()
+                .toLowerCase();
+            const valid = response.ok && finalProtocol === 'https:' && supportedTypes.has(contentType);
+
+            if (response.body) {
+                await response.body.cancel().catch(() => {});
+            }
+
+            return valid;
+        };
+
+        try {
+            if (await checkResponse('HEAD')) return true;
+            return await checkResponse('GET');
         } catch (err) {
-            console.error(`[IMAGE_EXTRACTOR] ⚠️ Imagem falhou na validação: ${url}`);
+            console.error(`[IMAGE_EXTRACTOR] ⚠️ Imagem indisponível ou incompatível: ${imageUrl}`);
             return false;
+        } finally {
+            clearTimeout(timeoutId);
         }
     }
 
@@ -62,13 +98,8 @@ class ImageExtractor {
                 imageUrl = $('meta[name="twitter:image"]').attr('content');
             }
 
-            // Garante que é uma URL absoluta
-            if (imageUrl && !imageUrl.startsWith('http')) {
-                const urlObj = new URL(articleUrl);
-                imageUrl = `${urlObj.protocol}//${urlObj.host}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
-            }
-
-            return imageUrl;
+            // Resolve URLs relativas e protocol-relative sem concatenar caminhos incorretamente.
+            return this.normalizeHttpsUrl(imageUrl, articleUrl);
         } catch (err) {
             console.error(`[IMAGE_EXTRACTOR] ⚠️ Erro ao extrair og:image de ${articleUrl}:`, err.message);
             return null;
@@ -79,19 +110,18 @@ class ImageExtractor {
      * Tenta obter a melhor imagem possível seguindo a ordem de fallback:
      * 1. Valida a thumbnail original (da API/RSS)
      * 2. Extrai og:image da página da notícia
-     * 3. Retorna o Placeholder
+     * 3. Omite a imagem quando não há uma alternativa válida.
      */
     static async getBestThumbnail(originalThumbnail, articleUrl) {
-        const PLACEHOLDER_URL = '/Banner.png';
-
         console.log(`[IMAGE_EXTRACTOR] 🔍 Analisando imagem para: ${articleUrl}`);
 
         // 1. Tenta a thumbnail original
-        if (originalThumbnail) {
-            const isValid = await this.isValidImageUrl(originalThumbnail);
+        const normalizedThumbnail = this.normalizeHttpsUrl(originalThumbnail, articleUrl);
+        if (normalizedThumbnail) {
+            const isValid = await this.isValidImageUrl(normalizedThumbnail);
             if (isValid) {
                 console.log(`[IMAGE_EXTRACTOR] ✅ Usando thumbnail original (Brave/RSS)`);
-                return originalThumbnail;
+                return normalizedThumbnail;
             }
         }
 
@@ -107,9 +137,9 @@ class ImageExtractor {
             }
         }
 
-        // 3. Placeholder final
-        console.log(`[IMAGE_EXTRACTOR] ⚠️ Nenhuma imagem válida. Usando placeholder padrão.`);
-        return PLACEHOLDER_URL;
+        // 3. Não persiste placeholder relativo: ele não pode ser resolvido por clientes de email.
+        console.log(`[IMAGE_EXTRACTOR] ⚠️ Nenhuma imagem válida. O card será exibido sem imagem.`);
+        return null;
     }
 }
 
