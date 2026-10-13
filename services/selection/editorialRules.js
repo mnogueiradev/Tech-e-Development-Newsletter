@@ -19,15 +19,18 @@ class EditorialRules {
      * Verifica se a notícia passa pelas regras editoriais da edição
      * Retorna { passed: boolean, reason: string }
      */
-    evaluate(news) {
+    evaluate(news, sourceLimit = config.limits.maxPerSource) {
         // Regra 1: Diversidade de Fontes (Max por fonte)
         const sourceName = news.source_name || 'Desconhecido';
         const sourceCount = this.selectedSourcesCount[sourceName] || 0;
-        
-        if (sourceCount >= config.limits.maxPerSource) {
+        const maxPerSource = Number.isInteger(sourceLimit) && sourceLimit > 0
+            ? sourceLimit
+            : config.limits.maxPerSource;
+
+        if (sourceCount >= maxPerSource) {
             return {
                 passed: false,
-                reason: `Rejeitada: Limite da fonte atingido (${config.limits.maxPerSource} notícias de ${sourceName})`
+                reason: `Rejeitada: Limite da fonte atingido (${maxPerSource} notícias de ${sourceName})`
             };
         }
 

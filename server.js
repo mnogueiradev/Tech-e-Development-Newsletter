@@ -989,7 +989,26 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
             .replace(/'/g, "&#039;");
     };
 
-    const renderNewsItem = (item) => `
+    const renderNewsItem = (item) => {
+        const newsId = Number(item.id);
+        const feedbackButtons = Number.isSafeInteger(newsId) && newsId > 0 ? `
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; margin-top: 16px; border-collapse: separate;">
+                <tr>
+                    <td width="50%" valign="middle" style="width: 50%; padding: 0 4px 0 0;">
+                        <a href="{{PUBLIC_URL}}/api/feedback?news=${newsId}&amp;sub={{SUBSCRIBER_TOKEN}}&amp;vote=up" aria-label="Gostei desta notícia" style="display: block; box-sizing: border-box; width: 100%; border: 1px solid #bbf7d0; border-radius: 8px; background-color: #f0fdf4; color: #166534; font-size: 13px; font-weight: 700; line-height: 18px; padding: 10px 6px; text-align: center; text-decoration: none;">
+                            👍 Gostei
+                        </a>
+                    </td>
+                    <td width="50%" valign="middle" style="width: 50%; padding: 0 0 0 4px;">
+                        <a href="{{PUBLIC_URL}}/api/feedback?news=${newsId}&amp;sub={{SUBSCRIBER_TOKEN}}&amp;vote=down" aria-label="Não gostei desta notícia" style="display: block; box-sizing: border-box; width: 100%; border: 1px solid #fecaca; border-radius: 8px; background-color: #fef2f2; color: #b91c1c; font-size: 13px; font-weight: 700; line-height: 18px; padding: 10px 6px; text-align: center; text-decoration: none;">
+                            👎 Não gostei
+                        </a>
+                    </td>
+                </tr>
+            </table>
+        ` : '';
+
+        return `
         <div style="margin-bottom: 30px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             ${item.image ? `<a href="${item.link}" target="_blank" style="display: block; text-decoration: none;"><img src="${item.image}" alt="Imagem da notícia" style="width: 100%; height: 200px; object-fit: cover; display: block; border-bottom: 1px solid #e2e8f0;" onerror="this.onerror=null; this.src='https://raw.githubusercontent.com/mnogueiradev/Tech-e-Development-Newsletter/main/Banner.png';"></a>` : ''}
             <div class="news-copy" style="padding: 24px;">
@@ -1000,9 +1019,11 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
                 <p class="news-source" style="margin: 16px 0 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
                     ${escapeHtml(item.source)}
                 </p>
+                ${feedbackButtons}
             </div>
         </div>
-    `;
+        `;
+    };
 
     return `
     <style type="text/css">
@@ -1036,6 +1057,17 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
         </div>
     </div>
     `;
+}
+
+function formatNewsletterItems(items) {
+    return (items || []).slice(0, 9).map(item => ({
+        id: item.id || item.news_id,
+        title: item.title,
+        link: item.original_link || item.link || '#',
+        description: item.description || '',
+        image: item.main_image || item.image || null,
+        source: item.source_name || item.source || 'Fonte Desconhecida'
+    }));
 }
 
 async function getNewsletterItems(topic) {
@@ -1090,14 +1122,7 @@ async function getNewsletterItems(topic) {
         }
     }
     
-    return filteredItems.slice(0, 9).map(item => ({
-        id: item.id || item.news_id,
-        title: item.title,
-        link: item.original_link || item.link || '#',
-        description: item.description || '',
-        image: item.main_image || item.image || null,
-        source: item.source_name || item.source || 'Fonte Desconhecida'
-    }));
+    return formatNewsletterItems(filteredItems);
 }
 
 async function processAndSendNewsletter(tz = null) {
@@ -1108,7 +1133,7 @@ async function processAndSendNewsletter(tz = null) {
 
     // 3. Buscar inscritos
     try {
-        let query = `SELECT email, topic, token FROM subscribers`;
+        let query = `SELECT id, email, topic, token FROM subscribers`;
         let params = [];
         if (tz) {
             query += ` WHERE timezone = ?`;
@@ -1136,36 +1161,93 @@ async function processAndSendNewsletter(tz = null) {
                 const emails = subscribers.map(s => s.email);
                 console.log(`Processando tópico '${topic}' para ${subscribers.length} inscrito(s): ${emails.join(', ')}`);
 
-                // Obter notícias do banco de dados (V2)
-                let newsBR = await getNewsletterItems(topic);
+                // A edição editorial é comum; o perfil individual só altera a seleção após feedback.
+                const sharedNews = await getNewsletterItems(topic);
+                console.log(`📰 Notícias base preparadas para '${topic}': ${sharedNews.length} itens`);
 
-                console.log(`📰 Notícias preparadas para '${topic}': ${newsBR.length} itens`);
-
-                if (!newsBR || newsBR.length === 0) {
-                    // Nunca enviar e-mail vazio: aborta só este tópico e segue para o próximo
+                if (!sharedNews || sharedNews.length === 0) {
                     const aviso = `[NEWSLETTER] ⚠️ 0 notícias para o tópico ${topic} — envio abortado para este tópico`;
                     console.log(aviso);
                     resumo.errors.push(aviso);
                     continue;
                 }
 
-                // Persiste o conteúdo antes do envio: se um envio falhar parcialmente,
-                // os mesmos artigos ainda ficam bloqueados na edição seguinte.
+                const NewsRepository = require('./repositories/newsRepository');
+                const FeedbackRepository = require('./repositories/feedbackRepository');
+                const SelectionEngine = require('./services/selection/selectionEngine');
+                const newsRepo = new NewsRepository(pool);
+                const feedbackRepo = new FeedbackRepository(pool);
                 const historyRepo = new NewsletterHistoryRepository(pool);
-                await historyRepo.recordEditionNews(newsBR);
+                const previousEditionNewsIds = await historyRepo.getPreviousEditionNewsIds();
+                const candidatePool = await newsRepo.getTopNews(100, [...previousEditionNewsIds]);
+                const profiles = await feedbackRepo.getPersonalizationProfiles(
+                    subscribers.map(subscriber => subscriber.id),
+                    candidatePool.map(item => item.id)
+                );
+                const personalizationEngine = new SelectionEngine(pool);
 
-                newsBR = await translateNewsItems(newsBR);
+                // Cada notícia é traduzida uma vez por lote, mesmo quando aparece em várias edições pessoais.
+                const translationCache = new Map();
+                const translateForEdition = async (items) => {
+                    const translated = [];
+                    for (const item of items) {
+                        const cacheKey = String(item.id || item.link || item.title);
+                        if (!translationCache.has(cacheKey)) {
+                            const [translatedItem] = await translateNewsItems([item]);
+                            translationCache.set(cacheKey, translatedItem || item);
+                        }
+                        translated.push(translationCache.get(cacheKey));
+                    }
+                    return translated;
+                };
 
-                const htmlContent = buildEmailHtml(newsBR, topic);
-
-                // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
-                console.log('Enviando newsletters com FROM=', FROM_EMAIL);
+                console.log('Enviando newsletters individualmente com FROM=', FROM_EMAIL);
                 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://techndevn.com';
-
-                // Envio SEQUENCIAL (um inscrito por vez) para respeitar o rate limit do Resend (10 req/s)
                 const results = [];
+
                 for (let i = 0; i < subscribers.length; i++) {
                     const sub = subscribers[i];
+                    const profile = profiles[String(sub.id)];
+                    let recipientNews = sharedNews;
+
+                    if (profile && profile.hasFeedback) {
+                        const personalizedSelection = await personalizationEngine.runPersonalizedSelection(
+                            profile.sourcePreferences,
+                            profile.downvotedNewsIds,
+                            topic !== 'tecnologia' ? topic : null,
+                            candidatePool
+                        );
+
+                        if (personalizedSelection.length > 0) {
+                            recipientNews = formatNewsletterItems(personalizedSelection);
+                            console.log(`[PERSONALIZAÇÃO] Edição ajustada para inscrito #${sub.id}: ${personalizedSelection.length} notícias.`);
+                        } else {
+                            const downvotedIds = new Set(profile.downvotedNewsIds.map(Number));
+                            const alternatives = sharedNews.filter(item => !downvotedIds.has(Number(item.id)));
+                            if (alternatives.length > 0) recipientNews = alternatives;
+                            console.warn(`[PERSONALIZAÇÃO] Sem candidatas suficientes para o inscrito #${sub.id}; usando a seleção compartilhada disponível.`);
+                        }
+                    }
+
+                    recipientNews = recipientNews.filter(item =>
+                        !previousEditionNewsIds.has(Number(item.id))
+                    );
+                    if (recipientNews.length === 0) {
+                        console.warn(`[NEWSLETTER] Nenhuma notícia nova para o inscrito #${sub.id}; envio individual cancelado.`);
+                        results.push({
+                            status: 'fulfilled',
+                            value: { success: false, error: 'Nenhuma notícia nova disponível.' }
+                        });
+                        continue;
+                    }
+
+                    // Registra cada edição pessoal antes do envio para impedir repetição
+                    // no próximo dia, inclusive quando houver falha parcial no lote.
+                    await historyRepo.recordEditionNews(recipientNews);
+
+                    const translatedNews = await translateForEdition(recipientNews);
+                    const htmlContent = buildEmailHtml(translatedNews, topic);
+
                     let subToken = sub.token;
                     if (!subToken) {
                         subToken = randomUUID();
@@ -1176,6 +1258,7 @@ async function processAndSendNewsletter(tz = null) {
                             console.error('[NEWSLETTER] Erro ao persistir token UUID permanente:', sub.email, tokenErr);
                         }
                     }
+
                     const userUnsubscribeUrl = `${PUBLIC_URL}/unsubscribe?token=${subToken}`;
                     const userHtmlContent = htmlContent
                         .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, userUnsubscribeUrl)
@@ -1215,7 +1298,6 @@ async function processAndSendNewsletter(tz = null) {
                     console.log(`Newsletter '${topic}' enviada com sucesso para ${emails.length} inscritos!`);
                 }
             } catch (err) {
-                // Uma falha no tópico não pode abortar os demais tópicos
                 console.error(`Erro ao processar o tópico '${topic}':`, err);
                 resumo.errors.push(`Tópico '${topic}': ${err && err.message ? err.message : err}`);
             }
