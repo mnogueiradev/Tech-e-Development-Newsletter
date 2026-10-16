@@ -1,5 +1,5 @@
 module.exports = {
-    version: '1.0.0',
+    version: '1.1.0',
     weights: {
         keyword: 1.0,
         source: 1.0,
@@ -10,12 +10,13 @@ module.exports = {
     },
     keywords: {
         high: [
-            'ia', 'inteligência artificial', 'openai', 'chatgpt', 'claude', 'gemini', 
-            'agentes de ia', 'llm', 'machine learning', 'deep learning', 'anthropic'
+            'ia', 'inteligência artificial', 'agentes de ia', 'llm',
+            'machine learning', 'deep learning'
         ],
         medium: [
             'automação', 'startups', 'big tech', 'programação', 'robótica', 
-            'produtividade', 'saas', 'nuvem', 'cloud', 'devops', 'software'
+            'produtividade', 'saas', 'nuvem', 'cloud', 'devops', 'software',
+            'openai', 'chatgpt', 'claude', 'gemini', 'anthropic'
         ]
     },
     penalties: {
@@ -34,7 +35,7 @@ module.exports = {
         'substituído por ia', 'impacto global'
     ],
     sourceWeights: {
-        'OpenAI Blog': 20,
+        'OpenAI Blog': 6,
         'TechCrunch': 15,
         'Hacker News': 15,
         'Wired': 10,

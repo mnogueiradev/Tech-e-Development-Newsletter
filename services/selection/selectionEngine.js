@@ -19,7 +19,7 @@ class SelectionEngine {
      * não voltam a aparecer enquanto ainda estiverem entre as candidatas.
      */
     async runPersonalizedSelection(sourcePreferences = {}, excludedNewsIds = [], categoryFilter = null, candidatePool = null) {
-        const candidates = Array.isArray(candidatePool) ? candidatePool : await this.newsRepo.getTopNews(100);
+        const candidates = Array.isArray(candidatePool) ? candidatePool : await this.newsRepo.getTopNews(200);
         const excludedIds = new Set((excludedNewsIds || []).map(Number));
         const normalizedCategory = String(categoryFilter || '').trim().toLowerCase();
         const rankedCandidates = [];
@@ -44,29 +44,67 @@ class SelectionEngine {
             });
         });
 
-        rankedCandidates.sort((a, b) =>
-            b.personalizedScore - a.personalizedScore ||
-            Number(b.news.score || 0) - Number(a.news.score || 0) ||
-            new Date(b.news.publication_date || 0) - new Date(a.news.publication_date || 0) ||
-            a.originalPosition - b.originalPosition
-        );
+        return this.selectCandidatesForEdition(rankedCandidates.map(candidate => ({
+            news: candidate.news,
+            score: candidate.personalizedScore,
+            originalPosition: candidate.originalPosition,
+            // Um saldo negativo reduz o teto da fonte de duas notícias para uma.
+            sourceLimit: candidate.affinity < 0
+                ? Math.max(1, config.limits.maxPerSource - 1)
+                : config.limits.maxPerSource
+        })));
+    }
 
-        this.rules.reset();
+    selectCandidatesForEdition(rankedCandidates) {
+        const selection = this.selectDiversifiedCandidates(rankedCandidates);
+        if (selection.length > config.limits.smallEditionThreshold) return selection;
+
+        // Em edições curtas, limite cada organização a uma única notícia.
+        return this.selectDiversifiedCandidates(
+            rankedCandidates,
+            config.limits.smallEditionMaxPerOrganization
+        );
+    }
+
+    selectDiversifiedCandidates(rankedCandidates, maxPerOrganizationOverride = null) {
+        this.rules.reset(maxPerOrganizationOverride);
+        const remaining = [...rankedCandidates];
         const finalSelection = [];
 
-        for (const candidate of rankedCandidates) {
-            if (finalSelection.length >= config.limits.maxNewsPerEdition) break;
+        while (remaining.length > 0 && finalSelection.length < config.limits.maxNewsPerEdition) {
+            let bestIndex = -1;
+            let bestEvaluation = null;
+            let bestAdjustedScore = -Infinity;
+            let bestBaseScore = -Infinity;
+            let bestPosition = Infinity;
 
-            // Um saldo negativo reduz o teto da fonte de duas notícias para uma.
-            const sourceLimit = candidate.affinity < 0
-                ? Math.max(1, config.limits.maxPerSource - 1)
-                : config.limits.maxPerSource;
-            const evaluation = this.rules.evaluate(candidate.news, sourceLimit);
-            if (!evaluation.passed) continue;
+            for (let index = 0; index < remaining.length; index++) {
+                const candidate = remaining[index];
+                const evaluation = this.rules.evaluate(candidate.news, candidate.sourceLimit);
+                if (!evaluation.passed) continue;
 
-            candidate.news.selectionReason = evaluation.reason;
-            this.rules.registerSelection(candidate.news);
-            finalSelection.push(candidate.news);
+                const baseScore = Number(candidate.score || 0);
+                const adjustedScore = this.rules.getDiversityAdjustedScore(candidate.news, baseScore);
+                const originalPosition = Number(candidate.originalPosition || 0);
+                const isBetter = adjustedScore > bestAdjustedScore ||
+                    (adjustedScore === bestAdjustedScore && baseScore > bestBaseScore) ||
+                    (adjustedScore === bestAdjustedScore && baseScore === bestBaseScore && originalPosition < bestPosition);
+
+                if (isBetter) {
+                    bestIndex = index;
+                    bestEvaluation = evaluation;
+                    bestAdjustedScore = adjustedScore;
+                    bestBaseScore = baseScore;
+                    bestPosition = originalPosition;
+                }
+            }
+
+            if (bestIndex < 0) break;
+
+            const [bestCandidate] = remaining.splice(bestIndex, 1);
+            bestCandidate.news.selectionReason = bestEvaluation.reason;
+            this.rules.registerSelection(bestCandidate.news);
+            finalSelection.push(bestCandidate.news);
         }
 
         return finalSelection;
@@ -81,7 +119,7 @@ class SelectionEngine {
         // 1. Busca um pacote amplo de candidatas para compensar anúncios descartados
         // Isso nos dá opções para rejeitar algumas e continuar preenchendo a lista
         const previousEditionNewsIds = await this.newsletterHistoryRepo.getPreviousEditionNewsIds();
-        const candidates = await this.newsRepo.getTopNews(100, [...previousEditionNewsIds]);
+        const candidates = await this.newsRepo.getTopNews(200, [...previousEditionNewsIds]);
 
         if (previousEditionNewsIds.size > 0) {
             console.log(`[SELECTION_ENGINE] 🚫 Excluindo ${previousEditionNewsIds.size} notícias da edição anterior.`);
@@ -95,40 +133,30 @@ class SelectionEngine {
 
         console.log(`[SELECTION_ENGINE] 📊 Iniciando avaliação editorial de ${candidates.length} candidatas...`);
         
-        this.rules.reset();
-        const finalSelection = [];
-
         console.log(`\n================= AVALIAÇÃO EDITORIAL =================`);
 
-        // 2. Itera pelas candidatas (que já vêm ordenadas pelo maior Score)
-        for (const news of candidates) {
-            // Se já enchemos a newsletter, para o loop
-            if (finalSelection.length >= config.limits.maxNewsPerEdition) {
-                console.log(`[SELECTION_ENGINE] ✋ Limite de ${config.limits.maxNewsPerEdition} notícias atingido.`);
-                break;
-            }
-
-            // Descarta anúncios já armazenados antes de aplicar as regras editoriais.
+        // 2. Remove anúncios e escolhe o próximo maior score ajustado pela
+        // variedade já presente na edição.
+        const editorialCandidates = candidates.filter(news => {
             const adDecision = classifyAdvertisement(news);
-            if (adDecision.isAdvertisement) {
-                console.log(`🚫 [ANÚNCIO REJEITADO] ${news.title} — ${adDecision.reasons.join(', ')}`);
-                continue;
-            }
+            if (!adDecision.isAdvertisement) return true;
 
-            // 3. Submete a notícia às regras editoriais (diversidade, repetição, etc)
-            const evaluation = this.rules.evaluate(news);
+            console.log(`🚫 [ANÚNCIO REJEITADO] ${news.title} — ${adDecision.reasons.join(', ')}`);
+            return false;
+        }).map((news, originalPosition) => ({
+            news,
+            score: Number(news.score || 0),
+            originalPosition
+        }));
+        const finalSelection = this.selectCandidatesForEdition(editorialCandidates);
 
-            if (evaluation.passed) {
-                console.log(`✅ [SELECIONADA] [Score: ${news.score}] ${news.title}`);
-                console.log(`   -> Motivos: ${evaluation.reason}`);
-                
-                news.selectionReason = evaluation.reason;
-                this.rules.registerSelection(news);
-                finalSelection.push(news);
-            } else {
-                console.log(`❌ [REJEITADA]   [Score: ${news.score}] ${news.title}`);
-                console.log(`   -> Motivos: ${evaluation.reason}`);
-            }
+        finalSelection.forEach(news => {
+            console.log(`✅ [SELECIONADA] [Score: ${news.score}] ${news.title}`);
+            console.log(`   -> Motivos: ${news.selectionReason}`);
+        });
+
+        if (finalSelection.length >= config.limits.maxNewsPerEdition) {
+            console.log(`[SELECTION_ENGINE] ✋ Limite de ${config.limits.maxNewsPerEdition} notícias atingido.`);
         }
 
         console.log(`=======================================================\n`);
