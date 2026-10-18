@@ -1,4 +1,43 @@
-const crypto = require('crypto');
+async function preserveFeedbackOnReferencedRecordDeletion(pool, columnName, referencedTable, constraintName, deleteRule, nullable) {
+    const [constraints] = await pool.execute(
+        `SELECT rc.CONSTRAINT_NAME, rc.DELETE_RULE
+         FROM information_schema.REFERENTIAL_CONSTRAINTS rc
+         JOIN information_schema.KEY_COLUMN_USAGE kcu
+           ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA
+          AND kcu.TABLE_NAME = rc.TABLE_NAME
+          AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+         WHERE rc.CONSTRAINT_SCHEMA = DATABASE()
+           AND rc.TABLE_NAME = 'news_feedback'
+           AND kcu.COLUMN_NAME = ?
+           AND kcu.REFERENCED_TABLE_NAME = ?`,
+        [columnName, referencedTable]
+    );
+
+    const [[column]] = await pool.execute(
+        `SELECT IS_NULLABLE
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = 'news_feedback'
+           AND COLUMN_NAME = ?`,
+        [columnName]
+    );
+    const correctNullability = column && (String(column.IS_NULLABLE).toUpperCase() === 'YES') === nullable;
+    const correctConstraint = constraints.length === 1 &&
+        String(constraints[0].DELETE_RULE).toUpperCase() === deleteRule;
+    if (correctNullability && correctConstraint) return;
+
+    for (const row of constraints) {
+        const safeName = String(row.CONSTRAINT_NAME).replace(/`/g, '``');
+        await pool.execute(`ALTER TABLE news_feedback DROP FOREIGN KEY \`${safeName}\``);
+    }
+
+    await pool.execute(`ALTER TABLE news_feedback MODIFY COLUMN \`${columnName}\` INT ${nullable ? 'NULL' : 'NOT NULL'}`);
+    await pool.execute(
+        `ALTER TABLE news_feedback
+         ADD CONSTRAINT \`${constraintName}\`
+         FOREIGN KEY (\`${columnName}\`) REFERENCES \`${referencedTable}\`(id) ON DELETE ${deleteRule}`
+    );
+}
 
 async function initializeDatabase(pool) {
     try {
@@ -128,15 +167,20 @@ async function initializeDatabase(pool) {
             CREATE TABLE IF NOT EXISTS news_feedback (
               id INT AUTO_INCREMENT PRIMARY KEY,
               news_id INT NOT NULL,
-              subscriber_id INT NOT NULL,
+              subscriber_id INT NULL,
               vote ENUM('up', 'down') NOT NULL,
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
               UNIQUE KEY unique_vote (news_id, subscriber_id),
-              FOREIGN KEY (news_id) REFERENCES news_v2(id) ON DELETE CASCADE,
-              FOREIGN KEY (subscriber_id) REFERENCES subscribers(id) ON DELETE CASCADE
+              FOREIGN KEY (news_id) REFERENCES news_v2(id) ON DELETE RESTRICT,
+              FOREIGN KEY (subscriber_id) REFERENCES subscribers(id) ON DELETE SET NULL
             )
         `);
+
+        // Votos são histórico editorial: notícia com feedback não pode ser removida;
+        // ao excluir um assinante, o voto fica anonimizado e as métricas permanecem.
+        await preserveFeedbackOnReferencedRecordDeletion(pool, 'news_id', 'news_v2', 'fk_news_feedback_news_history', 'RESTRICT', false);
+        await preserveFeedbackOnReferencedRecordDeletion(pool, 'subscriber_id', 'subscribers', 'fk_news_feedback_subscriber_history', 'SET NULL', true);
 
         // Índice para consultar feedbacks por assinante sem varrer a tabela inteira.
         try {

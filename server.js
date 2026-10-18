@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const { randomUUID } = crypto;
+const { assertExpectedDatabaseFingerprint } = require('./repositories/databaseIdentity');
 const { initializeDatabase } = require('./repositories/dbInit');
 const NewsletterHistoryRepository = require('./repositories/newsletterHistoryRepository');
 const ImageExtractor = require('./services/imageExtractor');
@@ -45,6 +46,12 @@ if (!process.env.TIDB_URL) throw new Error("TIDB_URL não configurada");
 let pool;
 async function initDB() {
     try {
+        const databaseFingerprint = assertExpectedDatabaseFingerprint(
+            process.env.TIDB_URL,
+            process.env.TIDB_EXPECTED_FINGERPRINT
+        );
+        console.log(`[DB] Identidade do banco validada: ${databaseFingerprint}`);
+
         pool = mysql.createPool({
             uri: process.env.TIDB_URL,
             ssl: { rejectUnauthorized: true },

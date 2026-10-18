@@ -47,11 +47,11 @@ ALTER TABLE subscribers MODIFY token VARCHAR(36) NOT NULL;
 CREATE TABLE IF NOT EXISTS news_feedback (
   id INT AUTO_INCREMENT PRIMARY KEY,
   news_id INT NOT NULL,
-  subscriber_id INT NOT NULL,
+  subscriber_id INT NULL,
   vote ENUM('up', 'down') NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_vote (news_id, subscriber_id),
-  FOREIGN KEY (news_id) REFERENCES news_v2(id) ON DELETE CASCADE,
-  FOREIGN KEY (subscriber_id) REFERENCES subscribers(id) ON DELETE CASCADE
+  FOREIGN KEY (news_id) REFERENCES news_v2(id) ON DELETE RESTRICT,
+  FOREIGN KEY (subscriber_id) REFERENCES subscribers(id) ON DELETE SET NULL
 );
