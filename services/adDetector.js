@@ -28,6 +28,15 @@ const DIRECT_CALLS_TO_BUY = [
     /\bsaiba\s+onde\s+comprar\b/
 ];
 
+const PRODUCT_BUYING_GUIDE_PATTERNS = [
+    /\b(?:melhor(?:es)?|top\s+\d+)\b.{0,140}\b(?:para\s+comprar|to\s+buy|buying\s+guide|guia\s+de\s+compras?)\b/,
+    /\b(?:modelos?|produtos?|opcoes?|aparelhos?|dispositivos?)\b.{0,80}\b(?:para\s+comprar|to\s+buy)\b/,
+    /\b(?:guia\s+de\s+compras?|guia\s+de\s+compra|shopping\s+guide|buying\s+guide|what\s+to\s+buy)\b/,
+    /\b(?:qual|quais|which|what)\b.{0,60}\b(?:comprar|should\s+you\s+buy|to\s+buy)\b/,
+    /\b(?:vale|valem)\s+a\s+pena\s+comprar\b/,
+    /\b(?:best|top\s+\d+)\b.{0,100}\b(?:tvs?|televisions?|smartphones?|phones?|laptops?|notebooks?|tablets?|headphones?|monitors?|smartwatches?)\b.{0,60}\b(?:under\s+\$?\d+|for\s+every\s+budget|for\s+any\s+budget)\b/
+];
+
 function toPlainText(value) {
     if (value == null) return '';
     if (Array.isArray(value)) return value.map(toPlainText).join(' ');
@@ -78,7 +87,7 @@ function classifyAdvertisement(item = {}) {
     }
 
     const articleText = [title, summary, body].join(' ');
-    if (/\b(?:affiliate\s+links?|may\s+earn\s+(?:a\s+)?commission|commission\s+when\s+you\s+(?:buy|purchase)|links?\s+de\s+afiliados|podemos\s+receber\s+comissao|ganhamos\s+comissao)\b/.test(articleText)) {
+    if (/\b(?:affiliate\s+links?|this\s+article\s+contains\s+affiliate\s+links|may\s+earn\s+(?:a\s+)?commission|commission\s+(?:may\s+be\s+earned|when\s+you\s+(?:buy|purchase))|links?\s+de\s+afiliados?|podemos\s+receber\s+(?:uma\s+)?comissao|ganhamos\s+comissao|amazon\s+associate.{0,80}qualifying\s+purchases)\b/.test(articleText)) {
         return { isAdvertisement: true, reasons: ['affiliate or commission disclosure'] };
     }
 
@@ -97,6 +106,10 @@ function classifyAdvertisement(item = {}) {
     // Deal roundups and coupon posts are commercial content, even when the feed omits an ad label.
     if (PROMOTION_TERMS.some(pattern => pattern.test(title))) {
         return { isAdvertisement: true, reasons: ['headline focused on a deal, discount, or promotion'] };
+    }
+
+    if (PRODUCT_BUYING_GUIDE_PATTERNS.some(pattern => pattern.test(title))) {
+        return { isAdvertisement: true, reasons: ['headline is a product buying guide or shopping recommendation'] };
     }
 
     const salesCopy = [title, summary].join(' ');
