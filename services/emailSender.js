@@ -12,7 +12,7 @@ const RETRY_DELAYS_SECONDS = [2, 5, 10];
  * @param {string} params.html Corpo do e-mail em formato HTML
  * @returns {Promise<{success: boolean, id?: string, error?: string}>}
  */
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, text, unsubscribeUrl }) {
     const FROM_EMAIL = process.env.FROM_EMAIL || 'newsletter@techndevn.com';
     const FROM_NAME = 'Techndevn Newsletter';
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -27,8 +27,21 @@ async function sendEmail({ to, subject, html }) {
         from: `${FROM_NAME} <${FROM_EMAIL}>`,
         to: [to],
         subject: subject,
-        html: html
+        html: html,
+        text: text || htmlToText(html)
     };
+
+    if (unsubscribeUrl) {
+        const parsedUnsubscribeUrl = new URL(unsubscribeUrl);
+        if (parsedUnsubscribeUrl.protocol !== 'https:') {
+            return { success: false, error: 'Unsubscribe URL must use HTTPS' };
+        }
+
+        payload.headers = {
+            'List-Unsubscribe': `<${parsedUnsubscribeUrl.href}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+        };
+    }
 
     try {
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -80,6 +93,24 @@ async function sendEmail({ to, subject, html }) {
         console.error("❌ Falha de rede/timeout ao enviar via Resend:", error.message);
         return { success: false, error: error.message };
     }
+}
+
+function htmlToText(html) {
+    return html
+        .replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<\s*br\b[^>]*\/?>/gi, '\n')
+        .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#0?39;/gi, "'")
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n[ \t]+/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 }
 
 module.exports = { sendEmail };

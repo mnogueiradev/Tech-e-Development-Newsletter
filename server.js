@@ -1071,6 +1071,31 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     `;
 }
 
+function buildEmailText(newsItems, topic = 'tecnologia', unsubscribeUrl = '') {
+    const newsletterName = topic === 'financas' ? 'Sua Dose de Finanças' : 'Sua Dose de Tecnologia';
+    const lines = [
+        newsletterName,
+        '',
+        'Aqui estão as notícias mais quentes de hoje, curadas para você.',
+        ''
+    ];
+
+    newsItems.forEach((item, index) => {
+        lines.push(`${index + 1}. ${item.title || 'Notícia'}`);
+        if (item.description) lines.push(item.description);
+        if (item.source) lines.push(`Fonte: ${item.source}`);
+        if (item.link) lines.push(item.link);
+        lines.push('');
+    });
+
+    if (unsubscribeUrl) {
+        lines.push('Para cancelar sua inscrição, acesse:');
+        lines.push(unsubscribeUrl);
+    }
+
+    return lines.join('\n').trim();
+}
+
 function formatNewsletterItems(items) {
     return (items || []).slice(0, 9).map(item => ({
         id: item.id || item.news_id,
@@ -1320,7 +1345,9 @@ async function processAndSendNewsletter(tz = null) {
                     const result = await sendEmail({
                         to: sub.email,
                         subject: `${topic === 'financas' ? 'Techndevn Finanças' : 'Techndevn'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
-                        html: userHtmlContent
+                        html: userHtmlContent,
+                        text: buildEmailText(translatedNews, topic, userUnsubscribeUrl),
+                        unsubscribeUrl: userUnsubscribeUrl
                     });
 
                     results.push({ status: 'fulfilled', value: result });
@@ -1408,8 +1435,10 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
         // Envia email usando Resend
         const sendResult = await sendEmail({
             to: email,
-            subject: 'Bem-vindo(a) ao Techndevn Newsletter!',
-            html: userHtmlContent
+            subject: 'Sua primeira edição da Techndevn Newsletter',
+            html: userHtmlContent,
+            text: buildEmailText(newsBR, topic, userUnsubscribeUrl),
+            unsubscribeUrl: userUnsubscribeUrl
         });
 
         if (!sendResult.success) {
