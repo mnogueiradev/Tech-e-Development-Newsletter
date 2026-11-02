@@ -205,7 +205,14 @@ async function initializeDatabase(pool) {
             { name: 'TechTudo', url: 'https://www.techtudo.com.br/rss/techtudo/', category: 'desenvolvimento', lang: 'pt-BR' },
             { name: 'TecMundo', url: 'https://rss.tecmundo.com.br/feed', category: 'desenvolvimento', lang: 'pt-BR' },
             { name: 'Hardware.com.br', url: 'https://www.hardware.com.br/feed/', category: 'hardware', lang: 'pt-BR' },
-            { name: 'Startupi', url: 'https://startupi.com.br/feed/', category: 'startups', lang: 'pt-BR' }
+            { name: 'Startupi', url: 'https://startupi.com.br/feed/', category: 'startups', lang: 'pt-BR' },
+            // Novas fontes para ampliar cobertura de hardware, telecom, segurança e negócios
+            { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'desenvolvimento', lang: 'en' },
+            { name: 'Mobile Time', url: 'https://www.mobiletime.com.br/feed/', category: 'telecomunicacoes', lang: 'pt-BR' },
+            { name: 'Convergência Digital', url: 'https://convergenciadigital.com.br/feed/', category: 'telecomunicacoes', lang: 'pt-BR' },
+            { name: 'Adrenaline', url: 'https://www.adrenaline.com.br/feed/', category: 'hardware', lang: 'pt-BR' },
+            { name: 'IGN Brasil', url: 'https://br.ign.com/feed.xml', category: 'games', lang: 'pt-BR' },
+            { name: 'The Register', url: 'https://www.theregister.com/headlines.atom', category: 'cloud', lang: 'en' }
         ];
 
         for (const src of defaultSources) {
