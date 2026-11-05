@@ -1,0 +1,26 @@
+-- Persistent scheduler state for daily T-minus discovery. Additive only.
+CREATE TABLE IF NOT EXISTS editorial_discovery_runs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  schedule_id VARCHAR(64) NOT NULL,
+  edition_date DATE NOT NULL,
+  timezone VARCHAR(64) NOT NULL,
+  scheduled_at DATETIME NOT NULL,
+  status ENUM('pending','running','completed','completed_with_warnings','failed') NOT NULL DEFAULT 'pending',
+  lock_token CHAR(36) NULL,
+  lease_expires_at DATETIME NULL,
+  attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+  next_attempt_at DATETIME NULL,
+  started_at DATETIME NULL,
+  completed_at DATETIME NULL,
+  result_count INT UNSIGNED NOT NULL DEFAULT 0,
+  new_article_count INT UNSIGNED NOT NULL DEFAULT 0,
+  duplicate_count INT UNSIGNED NOT NULL DEFAULT 0,
+  rejected_count INT UNSIGNED NOT NULL DEFAULT 0,
+  failure_count INT UNSIGNED NOT NULL DEFAULT 0,
+  duration_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  last_error TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_editorial_discovery_schedule_date (schedule_id, edition_date, timezone),
+  KEY idx_editorial_discovery_due (status, next_attempt_at, lease_expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

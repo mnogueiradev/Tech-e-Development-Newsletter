@@ -14,6 +14,7 @@ const { initializeDatabase } = require('./repositories/dbInit');
 const NewsletterHistoryRepository = require('./repositories/newsletterHistoryRepository');
 const ImageExtractor = require('./services/imageExtractor');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
+const { createDiscoveryScheduler } = require('./services/discovery/discoveryScheduler');
 const { translateNewsItems, isBrazilianSource } = require('./services/newsTranslation');
 const jwt = require('jsonwebtoken');
 
@@ -133,6 +134,14 @@ async function initDB() {
         // Inicialização da parte de coleta de notícias (RSS)
         await initializeDatabase(pool);
         initNewsScheduler(pool);
+
+        // Scheduler editorial opcional: falhas de configuração/schema não interrompem RSS ou API.
+        try {
+            const editorialScheduler = createDiscoveryScheduler({ pool });
+            editorialScheduler.start();
+        } catch (schedulerError) {
+            console.warn('⚠️ Scheduler editorial não iniciado:', schedulerError.message);
+        }
 
         // Reclassifica notícias legadas no banco para distribuir entre as 8 categorias canônicas
         setTimeout(async () => {
