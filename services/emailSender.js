@@ -1,4 +1,5 @@
 const RESEND_API_URL = 'https://api.resend.com/emails';
+const { isBraveDiscovered, getNewsOriginRows } = require('./editorial/legacyNewsPolicy');
 
 // Respeita o rate limit do Resend (10 req/s): até 3 tentativas em caso de 429
 const MAX_ATTEMPTS = 3;
@@ -95,6 +96,51 @@ async function sendEmail({ to, subject, html, text, unsubscribeUrl }) {
     }
 }
 
+/**
+ * Legacy newsletter boundary. The old email template must never dispatch Brave-discovered
+ * candidates; those belong to the separate approved editorial-edition delivery flow.
+ */
+async function sendLegacyNewsletterEmail({ pool, newsItems, to, subject, html, text, unsubscribeUrl, send = sendEmail }) {
+    if (!pool || !Array.isArray(newsItems)) {
+        throw new TypeError('pool e newsItems são obrigatórios para envio da newsletter legada.');
+    }
+    const items = newsItems;
+    const ids = items.map(item => Number(item?.id || item?.news_id));
+    if (items.some((item, index) => !Number.isInteger(ids[index]) || ids[index] <= 0)) {
+        throw new Error('Envio bloqueado: notícia sem ID verificável.');
+    }
+
+    if (ids.length) {
+        const uniqueIds = [...new Set(ids)];
+        const rows = await getNewsOriginRows(pool, uniqueIds);
+        const verifiedIds = new Set(rows.map(row => Number(row.id)));
+        if (uniqueIds.some(id => !verifiedIds.has(id))) {
+            throw new Error('Envio bloqueado: nem todas as notícias puderam ser verificadas no banco.');
+        }
+        const braveItems = rows.filter(isBraveDiscovered);
+        if (braveItems.length) {
+            const error = new Error('Envio legado bloqueado: notícias descobertas pela Brave exigem o fluxo editorial aprovado.');
+            error.code = 'UNAPPROVED_EDITORIAL_CONTENT';
+            error.blockedNewsIds = braveItems.map(item => Number(item.id));
+            throw error;
+        }
+    }
+
+    return send({ to, subject, html, text, unsubscribeUrl });
+}
+
+async function sendDiagnosticEmail({ to = process.env.RESEND_DIAGNOSTIC_TO } = {}) {
+    if (!['development', 'test'].includes(process.env.NODE_ENV) || process.env.ALLOW_RESEND_DIAGNOSTIC !== '1') {
+        throw new Error('Diagnóstico do Resend bloqueado: exige NODE_ENV=development ou test e ALLOW_RESEND_DIAGNOSTIC=1.');
+    }
+    if (!to) throw new Error('Defina RESEND_DIAGNOSTIC_TO para o destinatário do diagnóstico.');
+    return sendEmail({
+        to,
+        subject: 'Diagnóstico manual do Resend',
+        html: '<p>Mensagem de diagnóstico do Resend. Nenhuma notícia foi incluída.</p>'
+    });
+}
+
 function htmlToText(html) {
     return html
         .replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
@@ -113,4 +159,4 @@ function htmlToText(html) {
         .trim();
 }
 
-module.exports = { sendEmail };
+module.exports = { sendLegacyNewsletterEmail, sendDiagnosticEmail };

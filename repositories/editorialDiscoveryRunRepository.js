@@ -42,10 +42,22 @@ class EditorialDiscoveryRunRepository {
        SET status = ?, completed_at = UTC_TIMESTAMP(), lease_expires_at = NULL, next_attempt_at = NULL,
            result_count = ?, new_article_count = ?, duplicate_count = ?, rejected_count = ?,
            failure_count = ?, duration_ms = ?, last_error = ?
-       WHERE schedule_id = ? AND edition_date = ? AND timezone = ? AND lock_token = ? AND status = 'running'`,
+       WHERE schedule_id = ? AND edition_date = ? AND timezone = ? AND lock_token = ?
+         AND status = 'running' AND lease_expires_at > UTC_TIMESTAMP()`,
       [status, summary.resultsFound || 0, summary.newArticles || 0, summary.duplicates || 0,
        summary.rejected || 0, summary.failures || 0, Math.max(0, Math.floor(durationMs)),
        summary.errorMessage || null, scheduleId, editionDate, timezone, lockToken]
+    );
+    return result.affectedRows > 0;
+  }
+
+  async renew({ scheduleId, editionDate, timezone, lockToken, leaseSeconds = 2700 }) {
+    const [result] = await this.pool.execute(
+      `UPDATE editorial_discovery_runs
+       SET lease_expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? SECOND)
+       WHERE schedule_id = ? AND edition_date = ? AND timezone = ? AND lock_token = ?
+         AND status = 'running' AND lease_expires_at > UTC_TIMESTAMP()`,
+      [Math.max(60, Math.floor(leaseSeconds)), scheduleId, editionDate, timezone, lockToken]
     );
     return result.affectedRows > 0;
   }
@@ -57,7 +69,8 @@ class EditorialDiscoveryRunRepository {
            next_attempt_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), duration_ms = ?,
            result_count = ?, new_article_count = ?, duplicate_count = ?, rejected_count = ?,
            failure_count = ?, last_error = ?
-       WHERE schedule_id = ? AND edition_date = ? AND timezone = ? AND lock_token = ? AND status = 'running'`,
+       WHERE schedule_id = ? AND edition_date = ? AND timezone = ? AND lock_token = ?
+         AND status = 'running' AND lease_expires_at > UTC_TIMESTAMP()`,
       [Math.max(1, Math.floor(retryDelayMinutes)), Math.max(0, Math.floor(durationMs)),
        summary.resultsFound || 0, summary.newArticles || 0, summary.duplicates || 0, summary.rejected || 0,
        summary.failures || 1, String(error?.message || error || 'Falha sem detalhes').slice(0, 4000),

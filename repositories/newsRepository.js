@@ -1,3 +1,5 @@
+const { isLegacyNews, legacyNewsSql, isMissingDiscoveryTable } = require('../services/editorial/legacyNewsPolicy');
+
 class NewsRepository {
     constructor(pool) {
         this.pool = pool;
@@ -85,22 +87,28 @@ class NewsRepository {
             const exclusionClause = excludedIds.length > 0
                 ? `AND n.id NOT IN (${excludedIds.map(() => '?').join(', ')})`
                 : '';
-            const [rows] = await this.pool.execute(
-                `SELECT n.id, n.source_id, n.title, n.description, s.name as source_name, n.original_link, n.score,
-                        n.publication_date, n.status, n.tags, n.category, n.main_image, n.author
+            const query = includeDiscovery => `SELECT n.id, n.source_id, n.title, n.description,
+                        s.name as source_name, s.rss_url as source_rss_url, n.original_link, n.score,
+                        n.publication_date, n.status, n.tags, n.category, n.main_image, n.author, n.metadata
                  FROM news_v2 n
                  LEFT JOIN news_sources s ON n.source_id = s.id
-                 WHERE n.publication_date >= NOW() - INTERVAL 48 HOUR 
+                 WHERE n.publication_date >= NOW() - INTERVAL 48 HOUR
                  AND n.status != 'rejeitada'
+                 AND ${legacyNewsSql('n', { includeDiscovery })}
                  ${exclusionClause}
-                 ORDER BY n.score DESC, n.publication_date DESC 
-                 LIMIT ${limitNum}`,
-                excludedIds
-            );
+                 ORDER BY n.score DESC, n.publication_date DESC
+                 LIMIT ${limitNum}`;
+            let rows;
+            try {
+                [rows] = await this.pool.execute(query(true), excludedIds);
+            } catch (error) {
+                if (!isMissingDiscoveryTable(error)) throw error;
+                [rows] = await this.pool.execute(query(false), excludedIds);
+            }
             console.log(`[NewsRepo] Top News encontradas: ${rows.length}`);
             
             // Garantir que cada notícia tem um source_name, mesmo se NULL no DB
-            return rows.map(row => ({
+            return rows.filter(isLegacyNews).map(row => ({
                 ...row,
                 source_name: row.source_name || 'Fonte Desconhecida'
             }));

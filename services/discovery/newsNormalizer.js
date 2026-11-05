@@ -44,9 +44,8 @@ function normalizeNewsResult(result, query, discoveredAt = new Date()) {
   let parsed;
   try { parsed = new URL(canonicalUrl); } catch { return null; }
   const sourceName = result.profile?.long_name || result.profile?.name || result.meta_url?.hostname || parsed.hostname;
-  const sourceDomain = typeof result.meta_url?.hostname === 'string'
-    ? result.meta_url.hostname.toLowerCase().replace(/^www\./, '')
-    : parsed.hostname;
+  // The article URL is authoritative; Brave metadata is descriptive and may be absent or inconsistent.
+  const sourceDomain = parsed.hostname;
   return {
     title: result.title.trim().slice(0, 500),
     description: typeof result.description === 'string' ? result.description.trim() : null,

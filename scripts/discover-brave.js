@@ -2,7 +2,9 @@ require('dotenv').config();
 const mysql = require('mysql2/promise');
 const { assertExpectedDatabaseFingerprint } = require('../repositories/databaseIdentity');
 const defaultQueries = require('../config/discoveryQueries');
+const defaultConfig = require('../config/editorialDiscoverySchedule');
 const { discoverNews } = require('../services/discovery/discoveryService');
+const { runEditorialDiscoveryNow } = require('../services/discovery/discoveryScheduler');
 
 async function main() {
   const persist = process.argv.includes('--persist');
@@ -19,7 +21,18 @@ async function main() {
     const id = process.env.BRAVE_DISCOVERY_QUERY_ID;
     const queries = id ? defaultQueries.filter(query => query.id === id) : defaultQueries;
     if (id && !queries.length) throw new Error(`Consulta não encontrada: ${id}`);
-    const summary = await discoverNews({ pool, queries, persist });
+    let summary;
+    if (persist) {
+      const config = defaultConfig.loadEditorialDiscoverySchedule();
+      summary = await runEditorialDiscoveryNow({
+        pool,
+        schedule: config.schedules[0],
+        config,
+        discover: options => discoverNews({ ...options, queries })
+      });
+    } else {
+      summary = await discoverNews({ pool, queries, persist: false });
+    }
     console.log(JSON.stringify(summary, null, 2));
     if (summary.failures > 0 || summary.rejected > 0) process.exitCode = 1;
   } finally {

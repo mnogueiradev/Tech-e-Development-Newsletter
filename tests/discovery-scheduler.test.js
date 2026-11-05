@@ -35,7 +35,7 @@ test('scheduler recupera janela aberta após restart e só persiste uma vez entr
       rows.set(key, { status: 'running', lockToken: key });
       return { lockToken: key, attempt: 1 };
     },
-    async complete({ scheduleId, editionDate }) { rows.set(`${scheduleId}:${editionDate}`, { status: 'completed' }); },
+    async complete({ scheduleId, editionDate }) { rows.set(`${scheduleId}:${editionDate}`, { status: 'completed' }); return true; },
     async fail() { assert.fail('não esperava falha'); }
   };
   const config = { enabled: true, schedules: [schedule], leadHours: 24, maxDurationMinutes: 1, maxAttempts: 3, retryDelayMinutes: 1, pollCron: '* * * * *' };
@@ -68,11 +68,16 @@ test('falha Brave agenda retry controlado; timeout sinalizado e execução manua
   assert.equal(seenSignal instanceof AbortSignal, true);
 
   let manual;
-  const summary = await runEditorialDiscoveryNow({ pool: {}, publishedAfter: '2026-11-02T00:00:00Z',
-    publishedBefore: '2026-11-03T00:00:00Z', discover: async args => { manual = args; return { newArticles: 2 }; } });
+  const manualRepository = { async claim() { return { lockToken: 'manual-lock', attempt: 1 }; },
+    async renew() { return true; }, async complete() { return true; }, async fail() { return true; } };
+  const manualResult = await runEditorialDiscoveryNow({ pool: {}, repository: manualRepository,
+    config: { maxDurationMinutes: 1, maxAttempts: 2, retryDelayMinutes: 1 },
+    publishedAfter: '2026-11-02T00:00:00Z', publishedBefore: '2026-11-03T00:00:00Z', logger: { info() {}, error() {} },
+    discover: async args => { manual = args; return { newArticles: 2, failures: 0, status: 'success' }; } });
   assert.equal(manual.persist, true);
   assert.equal(manual.publishedAfter, '2026-11-02T00:00:00Z');
-  assert.deepEqual(summary, { newArticles: 2 });
+  assert.equal(manualResult.status, 'completed');
+  assert.equal(manualResult.summary.newArticles, 2);
 });
 
 test('tentativas são limitadas e uma execução lenta é abortada dentro do prazo configurado', async () => {

@@ -51,6 +51,79 @@ function dueSchedules({ schedules, now, leadHours }) {
   return due;
 }
 
+function abortError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function raceWithAbort(promise, signal) {
+  if (signal.aborted) return Promise.reject(signal.reason || new Error('Descoberta cancelada.'));
+  const aborted = new Promise((_, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason || new Error('Descoberta cancelada.')), { once: true });
+  });
+  return Promise.race([promise, aborted]);
+}
+
+async function executeClaimedRun({ pool, repository, discover, due, lock, config, now, logger,
+  publishedAfter = due.discoveryAt, publishedBefore = null, manual = false }) {
+  const { schedule, editionDate } = due;
+  const leaseSeconds = (config.maxDurationMinutes + 5) * 60;
+  const persistenceLease = { scheduleId: schedule.id, editionDate, timezone: schedule.timezone, lockToken: lock.lockToken };
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  let heartbeatBusy = false;
+  const context = { schedule, editionDate, attempt: lock.attempt, manual };
+  const abortForLeaseLoss = () => controller.abort(abortError('DISCOVERY_LEASE_LOST', 'A execução perdeu a posse do lease editorial.'));
+  const heartbeat = setInterval(async () => {
+    if (heartbeatBusy || controller.signal.aborted) return;
+    heartbeatBusy = true;
+    try {
+      const renewed = await repository.renew({ ...persistenceLease, leaseSeconds });
+      if (!renewed) abortForLeaseLoss();
+    } catch (error) {
+      logger.error(`[EDITORIAL DISCOVERY] Falha ao renovar lease ${schedule.id}/${editionDate}: ${error.message}`);
+      abortForLeaseLoss();
+    } finally { heartbeatBusy = false; }
+  }, Math.max(1000, Math.floor((leaseSeconds * 1000) / 3)));
+  const timeout = setTimeout(() => controller.abort(abortError('DISCOVERY_TIMEOUT', 'Duração máxima da descoberta excedida.')),
+    config.maxDurationMinutes * 60 * 1000);
+
+  logger.info(`[EDITORIAL DISCOVERY] Início ${schedule.id}/${editionDate} tentativa ${lock.attempt}${manual ? ' (manual)' : ''}.`);
+  const discoveryPromise = Promise.resolve().then(() => discover({
+    pool, publishedAfter, publishedBefore: publishedBefore || now(), persist: true,
+    signal: controller.signal, persistenceLease, schedule, editionDate
+  }));
+  try {
+    // Race the worker against timeout/lease loss. Any late writer still has to pass the
+    // transaction-level lease fence before each article insert.
+    const summary = await raceWithAbort(discoveryPromise, controller.signal);
+    if (summary.failures > 0) {
+      const failure = new Error(`Brave reportou ${summary.failures} falha(s) em consultas.`);
+      failure.summary = summary;
+      throw failure;
+    }
+    const durationMs = Date.now() - startedAt;
+    const status = summary.status === 'partial' ? 'completed_with_warnings' : 'completed';
+    const saved = await repository.complete({ ...persistenceLease, status, summary, durationMs });
+    if (!saved) throw abortError('DISCOVERY_LEASE_LOST', 'O lease expirou antes de concluir a descoberta.');
+    logger.info(`[EDITORIAL DISCOVERY] Fim ${schedule.id}/${editionDate}: ${summary.newArticles || 0} novas, ${summary.duplicates || 0} duplicadas, ${durationMs}ms.`);
+    return { ...context, summary, status, durationMs };
+  } catch (error) {
+    if (!controller.signal.aborted) controller.abort(error);
+    // The runner may still be settling, but its next transaction is fenced by the run row.
+    void discoveryPromise.catch(() => {});
+    const durationMs = Date.now() - startedAt;
+    await repository.fail({ ...persistenceLease, error, summary: error.summary || {},
+      retryDelayMinutes: config.retryDelayMinutes, durationMs });
+    logger.error(`[EDITORIAL DISCOVERY] Falha ${schedule.id}/${editionDate} após ${durationMs}ms: ${error.message}`);
+    return { ...context, error, status: 'failed', durationMs };
+  } finally {
+    clearInterval(heartbeat);
+    clearTimeout(timeout);
+  }
+}
+
 function createDiscoveryScheduler({ pool, config = defaultConfig.loadEditorialDiscoverySchedule(), cron = cronDefault,
   repository = null, discover = discoverNews, now = () => new Date(), logger = console } = {}) {
   let task = null;
@@ -67,38 +140,7 @@ function createDiscoveryScheduler({ pool, config = defaultConfig.loadEditorialDi
     });
     if (!lock) return { skipped: true, editionDate, scheduleId: schedule.id };
 
-    const startedAt = Date.now();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(new Error('Duração máxima da descoberta excedida.')),
-      config.maxDurationMinutes * 60 * 1000);
-    const context = { schedule, editionDate, discoveryAt, publicationAt, attempt: lock.attempt };
-    logger.info(`[EDITORIAL DISCOVERY] Início ${schedule.id}/${editionDate} tentativa ${lock.attempt}.`);
-    try {
-      const summary = await discover({
-        pool, publishedAfter: discoveryAt, publishedBefore: now(), persist: true,
-        signal: controller.signal, schedule, editionDate
-      });
-      const durationMs = Date.now() - startedAt;
-      if (summary.failures > 0) {
-        const failure = new Error(`Brave reportou ${summary.failures} falha(s) em consultas.`);
-        failure.summary = summary;
-        throw failure;
-      }
-      const status = summary.status === 'partial' ? 'completed_with_warnings' : 'completed';
-      await runRepository.complete({ scheduleId: schedule.id, editionDate, timezone: schedule.timezone,
-        lockToken: lock.lockToken, status, summary, durationMs });
-      logger.info(`[EDITORIAL DISCOVERY] Fim ${schedule.id}/${editionDate}: ${summary.newArticles || 0} novas, ${summary.duplicates || 0} duplicadas, ${durationMs}ms.`);
-      return { ...context, summary, status, durationMs };
-    } catch (error) {
-      const durationMs = Date.now() - startedAt;
-      await runRepository.fail({ scheduleId: schedule.id, editionDate, timezone: schedule.timezone,
-        lockToken: lock.lockToken, error, summary: error.summary || {},
-        retryDelayMinutes: config.retryDelayMinutes, durationMs });
-      logger.error(`[EDITORIAL DISCOVERY] Falha ${schedule.id}/${editionDate} após ${durationMs}ms: ${error.message}`);
-      return { ...context, error, status: 'failed', durationMs };
-    } finally {
-      clearTimeout(timeout);
-    }
+    return executeClaimedRun({ pool, repository: runRepository, discover, due, lock, config, now, logger });
   }
 
   async function tick() {
@@ -129,9 +171,21 @@ function createDiscoveryScheduler({ pool, config = defaultConfig.loadEditorialDi
 }
 
 async function runEditorialDiscoveryNow({ pool, discover = discoverNews, schedule = { id: 'manual', timezone: 'UTC' },
-  editionDate = localDateParts(new Date(), schedule.timezone), publishedAfter, publishedBefore = new Date(), signal } = {}) {
+  editionDate = localDateParts(new Date(), schedule.timezone), publishedAfter = null, publishedBefore = new Date(),
+  repository = null, config = defaultConfig.loadEditorialDiscoverySchedule(), now = () => new Date(), logger = console } = {}) {
   if (!pool) throw new TypeError('pool é obrigatório para a descoberta manual.');
-  return discover({ pool, persist: true, schedule, editionDate, publishedAfter, publishedBefore, signal });
+  const runRepository = repository || new EditorialDiscoveryRunRepository(pool);
+  // Use the same persistent key as the scheduled edition so a manual run and the cron cannot overlap.
+  const manualSchedule = { ...schedule, id: schedule.id || 'default' };
+  const due = { schedule: manualSchedule, editionDate, discoveryAt: now(), publicationAt: null };
+  const maxDurationMinutes = config.maxDurationMinutes || 30;
+  const lock = await runRepository.claim({ scheduleId: manualSchedule.id, editionDate, timezone: manualSchedule.timezone,
+    scheduledAt: due.discoveryAt, leaseSeconds: (maxDurationMinutes + 5) * 60, maxAttempts: config.maxAttempts || 3 });
+  if (!lock) return { status: 'skipped', reason: 'manual run already claimed, completed, or out of attempts', editionDate };
+  const manualConfig = { ...config, maxDurationMinutes, retryDelayMinutes: config.retryDelayMinutes || 15 };
+  const result = await executeClaimedRun({ pool, repository: runRepository, discover, due, lock, config: manualConfig,
+    now, logger, publishedAfter: publishedAfter || new Date(now().getTime() - 24 * 60 * 60 * 1000), publishedBefore, manual: true });
+  return result;
 }
 
 module.exports = { createDiscoveryScheduler, dueSchedules, localDateParts, zonedLocalDateTimeToUtc, runEditorialDiscoveryNow };

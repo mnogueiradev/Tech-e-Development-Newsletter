@@ -1,3 +1,5 @@
+const { isLegacyNews, legacyNewsSql, isMissingDiscoveryTable, getNewsOriginRows } = require('../services/editorial/legacyNewsPolicy');
+
 class SelectionRepository {
     constructor(pool) {
         this.pool = pool;
@@ -11,6 +13,22 @@ class SelectionRepository {
         const todayStr = new Date().toISOString().split('T')[0];
 
         try {
+            const ids = selections.map(item => Number(item?.id));
+            if (ids.some(id => !Number.isInteger(id) || id <= 0)) {
+                throw new Error('Seleção legada bloqueada: notícia sem ID verificável.');
+            }
+            const uniqueIds = [...new Set(ids)];
+            const verifiedRows = await getNewsOriginRows(this.pool, uniqueIds);
+            const verifiedIds = new Set(verifiedRows.map(row => Number(row.id)));
+            if (uniqueIds.some(id => !verifiedIds.has(id))) {
+                throw new Error('Seleção legada bloqueada: nem todas as notícias existem no banco.');
+            }
+            if (verifiedRows.some(row => !isLegacyNews(row))) {
+                const error = new Error('Seleção legada bloqueada: notícias Brave exigem aprovação editorial.');
+                error.code = 'UNAPPROVED_EDITORIAL_CONTENT';
+                throw error;
+            }
+
             // Se já gerou seleção hoje, vamos limpar antes de gerar a nova para garantir frescor 
             // (Isso permite rodar o gerador várias vezes sem duplicar)
             await this.pool.execute(
@@ -51,17 +69,24 @@ class SelectionRepository {
     async getTodaySelections() {
         const todayStr = new Date().toISOString().split('T')[0];
         try {
-            const [rows] = await this.pool.execute(`
-                SELECT n.id, n.title, n.description, s.name as source_name, n.original_link, 
-                       n.main_image, es.position, n.category
+            const query = includeDiscovery => `SELECT n.id, n.title, n.description, s.name as source_name,
+                       s.rss_url as source_rss_url, n.original_link, n.main_image, es.position,
+                       n.category, n.metadata
                 FROM edition_selections es
                 JOIN news_v2 n ON es.news_id = n.id
                 LEFT JOIN news_sources s ON n.source_id = s.id
                 WHERE es.edition_date = ?
-                ORDER BY es.position ASC
-            `, [todayStr]);
+                  AND ${legacyNewsSql('n', { includeDiscovery })}
+                ORDER BY es.position ASC`;
+            let rows;
+            try {
+                [rows] = await this.pool.execute(query(true), [todayStr]);
+            } catch (error) {
+                if (!isMissingDiscoveryTable(error)) throw error;
+                [rows] = await this.pool.execute(query(false), [todayStr]);
+            }
             
-            return rows;
+            return rows.filter(isLegacyNews);
         } catch (error) {
             console.error('[SelectionRepo] ❌ Erro ao buscar seleções de hoje:', error);
             return [];

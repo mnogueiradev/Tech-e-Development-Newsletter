@@ -11,9 +11,11 @@
     "db:fingerprint": "node scripts/get-database-fingerprint.js",
     "db:migrate:editorial": "node scripts/migrate-editorial.js",
     "test:editorial-db": "node --test tests/editorial-db.test.js",
+    "test:editorial-db:mysql": "node --test tests/editorial-migrations.mysql.test.js",
     "discover:brave": "node scripts/discover-brave.js",
     "test:brave-discovery": "node --test tests/brave-discovery.test.js",
     "test:discovery-scheduler": "node --test tests/discovery-scheduler.test.js",
+    "test:editorial-isolation": "node --test tests/editorial-isolation.test.js",
     "deploy:oracle": "npm install --omit=dev && npm run build && pm2 restart newsletter || pm2 start deploy/ecosystem.config.cjs"
   },
   "keywords": [],

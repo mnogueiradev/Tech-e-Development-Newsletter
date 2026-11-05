@@ -11,6 +11,8 @@ const crypto = require('crypto');
 const { initializeDatabase } = require('./repositories/dbInit');
 const { initNewsScheduler, runNewsCollection } = require('./services/newsScheduler');
 const { translateNewsItems, isBrazilianSource } = require('./services/newsTranslation');
+const { getNewsOriginRows, isLegacyNews } = require('../services/editorial/legacyNewsPolicy');
+const { sendLegacyNewsletterEmail } = require('../services/emailSender');
 const jwt = require('jsonwebtoken');
 
 
@@ -680,6 +682,41 @@ function buildEmailHtml(newsBR, topic = 'tecnologia') {
     `;
 }
 
+async function getLegacyNewsletterItems(topic) {
+    const SelectionEngine = require('./services/selection/selectionEngine');
+    let selected = await new SelectionEngine(pool).runDailySelection(true);
+    if (topic && topic !== 'tecnologia') {
+        selected = selected.filter(item => String(item.category || '').toLowerCase().includes(topic.toLowerCase()));
+    }
+    return selected.slice(0, 9).map(item => ({
+        id: item.id,
+        title: item.title,
+        link: item.original_link,
+        description: item.description,
+        image: item.main_image,
+        source: item.source_name
+    }));
+}
+
+async function assertLegacyNewsletterItems(newsItems) {
+    if (!Array.isArray(newsItems) || newsItems.length === 0) {
+        throw new Error('Envio bloqueado: nenhuma notícia legada disponível.');
+    }
+    const ids = newsItems.map(item => Number(item.id));
+    if (ids.some(id => !Number.isInteger(id) || id <= 0)) {
+        throw new Error('Envio bloqueado: notícia sem ID verificável.');
+    }
+    const uniqueIds = [...new Set(ids)];
+    const rows = await getNewsOriginRows(pool, uniqueIds);
+    const verifiedIds = new Set(rows.map(row => Number(row.id)));
+    if (uniqueIds.some(id => !verifiedIds.has(id))) {
+        throw new Error('Envio bloqueado: nem todas as notícias puderam ser verificadas no banco.');
+    }
+    if (rows.some(row => !isLegacyNews(row))) {
+        throw new Error('Envio legado bloqueado: notícias descobertas pela Brave exigem aprovação editorial.');
+    }
+}
+
 async function processAndSendNewsletter(tz = null) {
     console.log(`Iniciando processamento da newsletter diária${tz ? ` para o fuso ${tz}` : ''}...`);
 
@@ -710,37 +747,32 @@ async function processAndSendNewsletter(tz = null) {
             console.log(`Processando tópico '${topic}' para ${emails.length} inscrito(s): ${emails.join(', ')}`);
 
             const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-            const queries = {
-                tecnologia: 'tecnologia',
-                financas: 'finanças mercado'
-            };
-            const q = queries[topic] || queries['tecnologia'];
+            const newsBR = await getLegacyNewsletterItems(topic);
+            if (newsBR.length === 0) {
+                console.log(`Nenhuma notícia legada aprovada para '${topic}'. Envio ignorado.`);
+                continue;
+            }
+            await assertLegacyNewsletterItems(newsBR);
+            const translatedNews = await translateNewsItems(newsBR);
 
-            // Busca 1 notícia do Olhar Digital e 8 notícias gerais
-            const [olharNews, generalNews] = await Promise.all([
-                fetchOlharDigitalNews(1, topic),
-                fetchFromBraveSearch(q, 'br', 8)
-            ]);
-
-            // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
-            let newsBR = [...olharNews, ...generalNews].slice(0, 9);
-
-            console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
-
-            newsBR = await translateNewsItems(newsBR);
-
-            const htmlContent = buildEmailHtml(newsBR, topic);
+            const htmlContent = buildEmailHtml(translatedNews, topic);
 
             // Envia individualmente para cada inscrito ver seu próprio email no campo "To"
             console.log('Enviando newsletters com FROM=', FROM_EMAIL);
-            const sendPromises = emails.map(email => {
-                return Sender.net.emails.send({
+            const subject = `${topic === 'financas' ? 'Techndevn Finanças' : 'Techndevn'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`;
+            const sendPromises = emails.map(email => sendLegacyNewsletterEmail({
+                pool,
+                newsItems: newsBR,
+                to: email,
+                subject,
+                html: htmlContent,
+                send: ({ to, subject, html }) => Sender.net.emails.send({
                     from: FROM_EMAIL,
-                    to: email,
-                    subject: `${topic === 'financas' ? 'Techndevn Finanças' : 'Techndevn'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
-                    html: htmlContent
-                });
-            });
+                    to,
+                    subject,
+                    html
+                })
+            }));
 
             const results = await Promise.allSettled(sendPromises);
 
@@ -769,34 +801,26 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
     console.log(`📨 Enviando newsletter de boas-vindas para: ${email}`);
 
     try {
-        const queries = {
-            tecnologia: 'tecnologia',
-            financas: 'finanças mercado'
-        };
+        const newsBR = await getLegacyNewsletterItems(topic);
+        if (newsBR.length === 0) return false;
+        await assertLegacyNewsletterItems(newsBR);
+        const translatedNews = await translateNewsItems(newsBR);
 
-        const q = queries[topic] || queries['tecnologia'];
-
-        // Busca 1 notícia do Olhar Digital e 8 notícias gerais
-        const [olharNews, generalNews] = await Promise.all([
-            fetchOlharDigitalNews(1, topic),
-            fetchFromBraveSearch(q, 'br', 8)
-        ]);
-
-        // Combina as notícias, garantindo que a do Olhar Digital venha primeiro
-        let newsBR = [...olharNews, ...generalNews].slice(0, 9);
-
-        console.log(`📰 Notícias combinadas: ${olharNews.length} do Olhar Digital, ${generalNews.length} gerais`);
-
-        newsBR = await translateNewsItems(newsBR);
-
-        const htmlContent = buildEmailHtml(newsBR, topic);
+        const htmlContent = buildEmailHtml(translatedNews, topic);
 
         // Envia email usando Sender.net
-        const sendResult = await Sender.net.emails.send({
-            from: FROM_EMAIL,
+        const sendResult = await sendLegacyNewsletterEmail({
+            pool,
+            newsItems: newsBR,
             to: email,
             subject: 'Bem-vindo(a) ao Techndevn Newsletter!',
-            html: htmlContent
+            html: htmlContent,
+            send: ({ to, subject, html }) => Sender.net.emails.send({
+                from: FROM_EMAIL,
+                to,
+                subject,
+                html
+            })
         });
 
         console.log('Sender.net sendWelcome response:', sendResult);

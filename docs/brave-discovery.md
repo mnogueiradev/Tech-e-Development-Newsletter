@@ -6,6 +6,10 @@ O serviço fica em `services/discovery/`. Ele chama o endpoint dedicado `GET htt
 
 A normalização guarda os campos originais em `news_v2` e registra cada observação canônica em `news_discovery_records`; execuções e resultados ficam em `news_discovery_logs`. URL canônica remove parâmetros de rastreamento conhecidos, fragmentos e diferenças comuns de host/protocolo. Similaridade de título só marca `possible_duplicate`: esse artigo permanece salvo e pode ser revisado, não é descartado. Duplicata exata reutiliza a notícia existente sem sobrescrever conteúdo ou dados editoriais.
 
+Artigos efetivamente novos recebem uma identidade de origem própria em `news_sources`: uma entrada `brave://<host>` inativa por domínio, mesmo quando existe um feed RSS ativo do mesmo publisher. Essa identidade não é consumida pelo coletor RSS e mantém a origem Brave caso o metadata do artigo seja reconstruído. `metadata.provider = "brave"` e `news_discovery_records` também registram a descoberta. Notícias RSS observadas como duplicatas exatas pela Brave continuam sendo RSS e não são bloqueadas. Se uma notícia Brave histórica sem identidade própria voltar a ser descoberta, apenas seu `source_id` é corrigido; o conteúdo original não é sobrescrito. Não é feita uma varredura em massa dos dados antigos.
+
+O seletor e o sender legados excluem todos os artigos com esse marcador. A descoberta não os envia nem permite que `/trigger-email`, o cron ou a mensagem de boas-vindas os incluam. A futura entrega editorial precisa usar seu próprio fluxo aprovado; ela não foi conectada ao envio legado nesta fase.
+
 O serviço continua separado do agendador RSS e do envio atual. Ainda não há rota HTTP para esta fase. Para persistir, as tabelas da Fase 1 precisam ter sido migradas antes; este passo não executa migrações.
 
 ## API e limitações

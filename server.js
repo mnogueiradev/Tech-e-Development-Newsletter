@@ -4,7 +4,7 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const cron = require('node-cron');
 const path = require('path');
-const { sendEmail } = require('./services/emailSender');
+const { sendLegacyNewsletterEmail } = require('./services/emailSender');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
@@ -1351,7 +1351,9 @@ async function processAndSendNewsletter(tz = null) {
                         .replace(/\{\{PUBLIC_URL\}\}/g, PUBLIC_URL)
                         .replace(/\{\{SUBSCRIBER_TOKEN\}\}/g, subToken);
 
-                    const result = await sendEmail({
+                    const result = await sendLegacyNewsletterEmail({
+                        pool,
+                        newsItems: emailNews,
                         to: sub.email,
                         subject: `${topic === 'financas' ? 'Techndevn Finanças' : 'Techndevn'}: As 9 principais notícias do dia (${new Date().toLocaleDateString('pt-BR')})`,
                         html: userHtmlContent,
@@ -1442,7 +1444,9 @@ async function sendWelcomeNewsletter(email, topic = 'tecnologia') {
             .replace(/\{\{SUBSCRIBER_TOKEN\}\}/g, subToken);
 
         // Envia email usando Resend
-        const sendResult = await sendEmail({
+        const sendResult = await sendLegacyNewsletterEmail({
+            pool,
+            newsItems: newsBR,
             to: email,
             subject: 'Sua primeira edição da Techndevn Newsletter',
             html: userHtmlContent,

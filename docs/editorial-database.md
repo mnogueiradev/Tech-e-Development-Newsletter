@@ -1,5 +1,11 @@
 # Banco do Editorial Studio — Fase 1
 
+## Isolamento editorial (Fase 3.1)
+
+Registros Brave novos mantêm `metadata.provider = "brave"` em `news_v2` e recebem uma entrada `brave://<host>` inativa própria em `news_sources`, distinta de um RSS ativo do mesmo domínio. `news_discovery_records` persiste observações Brave únicas/possíveis; uma duplicata exata de um artigo RSS não muda sua origem RSS. `newsRepository`, `SelectionRepository` e `SelectionEngine` combinam esses sinais para excluir Brave do pipeline legado, com fallback metadata/source para instalações sem as tabelas de discovery. `sendLegacyNewsletterEmail` revalida origem e IDs imediatamente antes do transporte e falha fechado.
+
+O fluxo legado segue enviando artigos RSS. A aprovação editorial atual ainda não está conectada ao envio: artigos Brave não são encaminhados pelo sender antigo, mesmo se uma linha editorial vier a ser aprovada. A entrega editorial própria deve exigir aprovação no servidor quando for construída.
+
 ## Escopo e preservação
 
 O esquema aditivo está em `migrations/001_editorial_studio.sql`. `news_v2` continua sendo a fonte preservada dos dados originais; `editorial_articles` referencia a notícia original e guarda apenas a versão editorial. A Fase 1 não executa Brave, scheduler, rotas, editor, aprovação ou envio.

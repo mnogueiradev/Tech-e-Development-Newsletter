@@ -1,13 +1,16 @@
 require('dotenv').config();
-const { sendEmail } = require('./services/emailSender');
+const { sendDiagnosticEmail } = require('./services/emailSender');
 
 async function test() {
-    console.log("Testing Resend API...");
-    const result = await sendEmail({
-        to: 'nogmath185@gmail.com',
-        subject: 'Test',
-        html: '<p>Test from Resend</p>'
-    });
+    if (require.main !== module) throw new Error('Execute este diagnóstico manual diretamente.');
+    console.log('Testing Resend API diagnostic...');
+    const result = await sendDiagnosticEmail();
     console.log("Result:", result);
 }
-test();
+
+if (require.main === module) {
+    test().catch(error => {
+        console.error('[RESEND DIAGNOSTIC]', error.message);
+        process.exitCode = 1;
+    });
+}

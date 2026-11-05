@@ -110,6 +110,7 @@ test('discovery persists new and possible duplicates, rejects stale/invalid resu
   };
   const summary = await discoverNews({
     pool: {}, persist: true, queries: [{ id: 'software', q: 'software', category: 'dev' }, { id: 'broken', q: 'broken' }],
+    persistenceLease: { scheduleId: 'test', editionDate: '2026-11-03', timezone: 'UTC', lockToken: 'test-lock' },
     publishedAfter: '2026-11-02T00:00:00Z', publishedBefore: '2026-11-04T00:00:00Z',
     now: () => new Date('2026-11-03T12:00:00Z'), discoveryRepository, discoveryLogRepository,
     brave: { async search(query) { if (query.id === 'broken') throw new BraveApiError('rate limited', { status: 429, retryable: true }); return results; } }
@@ -131,13 +132,15 @@ test('repeat persistence reuses existing news without overwriting its original d
   const connection = {
     async beginTransaction() {}, async commit() {}, async rollback() {}, release() {},
     async execute(sql, params = []) {
+      if (/SELECT 1 AS owns_lease/.test(sql)) return [[{ owns_lease: 1 }], []];
+      if (/SELECT id FROM news_sources/.test(sql)) return [[{ id: 73 }], []];
       if (/SELECT dr\.news_id/.test(sql)) {
         const found = records.find(record => record.canonicalUrl === params[0]);
         return [[found ? { news_id: found.newsId, title: news.find(row => row.id === found.newsId).title, canonical_url: found.canonicalUrl, source_domain: found.domain } : undefined].filter(Boolean), []];
       }
       if (/INSERT INTO news_v2/.test(sql)) {
         const id = news.length + 1;
-        news.push({ id, title: params[0], original_link: params[2] });
+        news.push({ id, source_id: params[0], title: params[1], original_link: params[3] });
         return [{ insertId: id }];
       }
       if (/INSERT IGNORE INTO news_discovery_records/.test(sql)) {
@@ -151,19 +154,21 @@ test('repeat persistence reuses existing news without overwriting its original d
     }
   };
   const repo = new DiscoveryRepository({ getConnection: async () => connection });
+  const lease = { scheduleId: 'test', editionDate: '2026-11-03', timezone: 'UTC', lockToken: 'test-lock' };
   const item = {
     title: 'Original headline', description: 'Original description', originalUrl: 'https://example.com/story?utm_source=x',
     canonicalUrl: 'https://example.com/story', sourceDomain: 'example.com', category: 'tech', language: 'en',
     imageUrl: null, publishedAt: new Date('2026-11-03T00:00:00Z'), discoveredAt: new Date(), metadata: {}
   };
-  const first = await repo.persistDiscovered(item);
-  const second = await repo.persistDiscovered({ ...item, title: 'Changed title from later response' });
+  const first = await repo.persistDiscovered(item, undefined, { lease });
+  const second = await repo.persistDiscovered({ ...item, title: 'Changed title from later response' }, undefined, { lease });
   assert.equal(first.status, 'unique');
   assert.equal(first.insertedArticle, true);
   assert.equal(second.status, 'exact_duplicate');
   assert.equal(second.insertedArticle, false);
   assert.equal(news.length, 1);
   assert.equal(news[0].title, 'Original headline');
+  assert.equal(news[0].source_id, 73);
 });
 
 test('an old discovery timestamp does not make a stale article recent', () => {
