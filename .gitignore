@@ -4,3 +4,4 @@
 .next/
 out/
 newsletter.sqlite
+/.tmp-editorial-integrity-mysql-validate/
