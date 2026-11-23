@@ -12,7 +12,9 @@ const { runEditorialDiscoveryNow } = require('../services/discovery/discoverySch
 const { discoverNews } = require('../services/discovery/discoveryService');
 
 const brave = { id: 20, title: 'Brave article', metadata: { provider: 'brave' }, source_name: 'Example' };
-const rss = { id: 10, title: 'RSS article', metadata: null, source_name: 'RSS Example' };
+const rss = { id: 10, title: 'Linux software update adds new security features',
+  description: 'The open-source project released a new version of its operating system.',
+  category: 'desenvolvimento', tags: [], metadata: null, source_name: 'RSS Example' };
 
 test('provider policy identifies Brave records and preserves legacy RSS records', () => {
   assert.equal(isBraveDiscovered(brave), true);

@@ -4,6 +4,7 @@ const DiscoveryRepository = require('../../repositories/discoveryRepository');
 const { BraveNewsService } = require('./braveNewsService');
 const { normalizeNewsResult, isWithinPublicationWindow } = require('./newsNormalizer');
 const { detectDuplicate } = require('./newsDeduplicator');
+const { classifyTechnologyNews } = require('../technologyNewsFilter');
 
 async function discoverNews({ pool = null, brave = new BraveNewsService(), queries = defaultQueries,
   publishedAfter = null, publishedBefore = null, count = 20, maxPages = 1, persist = Boolean(pool), now = () => new Date(),
@@ -45,6 +46,13 @@ async function discoverNews({ pool = null, brave = new BraveNewsService(), queri
         const item = normalizeNewsResult(result, query, discoveredAt);
         if (!item || !isWithinPublicationWindow(item, publishedAfter, publishedBefore)) {
           rejectedCount++;
+          continue;
+        }
+
+        const technologyDecision = classifyTechnologyNews(item);
+        if (!technologyDecision.isTechnologyNews) {
+          rejectedCount++;
+          console.log(`[CONTENT_FILTER] Resultado Brave ignorado: ${item.title} (${technologyDecision.reason})`);
           continue;
         }
 

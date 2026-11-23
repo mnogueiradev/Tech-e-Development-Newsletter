@@ -50,12 +50,14 @@ async function getNewsOriginRows(pool, ids) {
   const uniqueIds = [...new Set((ids || []).map(Number).filter(id => Number.isInteger(id) && id > 0))];
   if (!uniqueIds.length) return [];
   const placeholders = uniqueIds.map(() => '?').join(', ');
-  const baseSelect = `SELECT n.id, n.metadata, s.rss_url AS source_rss_url
+  const baseSelect = `SELECT n.id, n.title, n.description, n.category, n.tags, n.metadata,
+      s.rss_url AS source_rss_url
     FROM news_v2 n LEFT JOIN news_sources s ON n.source_id = s.id
     WHERE n.id IN (${placeholders})`;
   try {
     const [rows] = await pool.execute(
-      `SELECT n.id, n.metadata, s.rss_url AS source_rss_url,
+      `SELECT n.id, n.title, n.description, n.category, n.tags, n.metadata,
+         s.rss_url AS source_rss_url,
          EXISTS (SELECT 1 FROM news_discovery_records d WHERE d.news_id = n.id
            AND d.provider = '${BRAVE_PROVIDER}' AND d.dedupe_status IN ('unique', 'possible_duplicate')) AS has_brave_origin
        FROM news_v2 n LEFT JOIN news_sources s ON n.source_id = s.id

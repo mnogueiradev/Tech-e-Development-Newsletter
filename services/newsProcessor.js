@@ -6,6 +6,7 @@ const ValidationService = require('./validationService');
 const ScoreEngine = require('./scoring/scoreEngine');
 const ImageExtractor = require('./imageExtractor');
 const { classifyAdvertisement } = require('./adDetector');
+const { classifyTechnologyNews } = require('./technologyNewsFilter');
 
 /**
  * Processa uma única notícia, sanitiza, verifica duplicação e salva
@@ -15,6 +16,12 @@ async function processAndSaveItem(newsRepo, rawItem, recentNewsList) {
     if (adDecision.isAdvertisement) {
         console.log(`[AD_FILTER] 🚫 Anúncio ignorado: ${rawItem.title} (${adDecision.reasons.join(', ')})`);
         return { status: 'advertisement', reasons: adDecision.reasons };
+    }
+
+    const technologyDecision = classifyTechnologyNews(rawItem);
+    if (!technologyDecision.isTechnologyNews) {
+        console.log(`[CONTENT_FILTER] Conteúdo fora de tecnologia ignorado: ${rawItem.title} (${technologyDecision.reason})`);
+        return { status: 'off_topic', reason: technologyDecision.reason };
     }
 
     // 1. Lógica de extração da imagem
@@ -100,6 +107,7 @@ async function runNewsCollection(pool) {
             errors: []
         };
         let adsRejected = 0;
+        let offTopicRejected = 0;
 
         try {
             // Mapeando fonte do BD para o formato que o RSS service espera
@@ -131,6 +139,7 @@ async function runNewsCollection(pool) {
                     if (result.status === 'saved') logData.news_saved++;
                     else if (result.status === 'duplicate') logData.duplicates++;
                     else if (result.status === 'advertisement') adsRejected++;
+                    else if (result.status === 'off_topic') offTopicRejected++;
 
                 } catch (itemErr) {
                     console.error(`[PROCESSOR] ❌ Erro ao processar item de ${source.name}:`, itemErr.message);
@@ -140,6 +149,9 @@ async function runNewsCollection(pool) {
             
             if (adsRejected > 0) {
                 console.log(`[AD_FILTER] ${adsRejected} conteúdo(s) promocional(is) descartado(s) de ${source.name}.`);
+            }
+            if (offTopicRejected > 0) {
+                console.log(`[CONTENT_FILTER] ${offTopicRejected} conteúdo(s) sem relevância tecnológica descartado(s) de ${source.name}.`);
             }
 
             // Atualiza data de última coleta da fonte

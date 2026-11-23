@@ -34,7 +34,7 @@ async function main() {
       summary = await discoverNews({ pool, queries, persist: false });
     }
     console.log(JSON.stringify(summary, null, 2));
-    if (summary.failures > 0 || summary.rejected > 0) process.exitCode = 1;
+    if (summary.failures > 0) process.exitCode = 1;
   } finally {
     if (pool) await pool.end();
   }

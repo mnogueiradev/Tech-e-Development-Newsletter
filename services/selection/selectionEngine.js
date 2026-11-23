@@ -5,6 +5,7 @@ const NewsRepository = require('../../repositories/newsRepository');
 const NewsletterHistoryRepository = require('../../repositories/newsletterHistoryRepository');
 const { classifyAdvertisement } = require('../adDetector');
 const { isLegacyNews } = require('../editorial/legacyNewsPolicy');
+const { isTechnologyNews } = require('../technologyNewsFilter');
 
 class SelectionEngine {
     constructor(pool) {
@@ -20,7 +21,8 @@ class SelectionEngine {
      * não voltam a aparecer enquanto ainda estiverem entre as candidatas.
      */
     async runPersonalizedSelection(sourcePreferences = {}, excludedNewsIds = [], categoryFilter = null, candidatePool = null) {
-        const candidates = (Array.isArray(candidatePool) ? candidatePool : await this.newsRepo.getTopNews(200)).filter(isLegacyNews);
+        const candidates = (Array.isArray(candidatePool) ? candidatePool : await this.newsRepo.getTopNews(200))
+            .filter(news => isLegacyNews(news) && isTechnologyNews(news));
         const excludedIds = new Set((excludedNewsIds || []).map(Number));
         const normalizedCategory = String(categoryFilter || '').trim().toLowerCase();
         const rankedCandidates = [];
@@ -120,7 +122,8 @@ class SelectionEngine {
         // 1. Busca um pacote amplo de candidatas para compensar anúncios descartados
         // Isso nos dá opções para rejeitar algumas e continuar preenchendo a lista
         const previousEditionNewsIds = await this.newsletterHistoryRepo.getPreviousEditionNewsIds();
-        const candidates = (await this.newsRepo.getTopNews(200, [...previousEditionNewsIds])).filter(isLegacyNews);
+        const candidates = (await this.newsRepo.getTopNews(200, [...previousEditionNewsIds]))
+            .filter(news => isLegacyNews(news) && isTechnologyNews(news));
 
         if (previousEditionNewsIds.size > 0) {
             console.log(`[SELECTION_ENGINE] 🚫 Excluindo ${previousEditionNewsIds.size} notícias da edição anterior.`);

@@ -1,4 +1,5 @@
 const { isLegacyNews, legacyNewsSql, isMissingDiscoveryTable } = require('../services/editorial/legacyNewsPolicy');
+const { isTechnologyNews } = require('../services/technologyNewsFilter');
 
 class NewsRepository {
     constructor(pool) {
@@ -76,11 +77,13 @@ class NewsRepository {
     async getTopNews(limit = 10, excludedNewsIds = []) {
         try {
             console.log(`[NewsRepo] Buscando Top News. Limite: ${limit}`);
-            let limitNum = Number(limit);
+            let limitNum = Math.floor(Number(limit));
             if (isNaN(limitNum) || limitNum <= 0) {
                 console.warn(`[NewsRepo] Limite inválido: ${limit}. Usando padrão 10.`);
                 limitNum = 10;
             }
+            limitNum = Math.min(limitNum, 2000);
+            const queryLimit = Math.min(limitNum * 5, 5000);
             const excludedIds = [...new Set((excludedNewsIds || [])
                 .map(Number)
                 .filter(id => Number.isInteger(id) && id > 0))];
@@ -97,7 +100,7 @@ class NewsRepository {
                  AND ${legacyNewsSql('n', { includeDiscovery })}
                  ${exclusionClause}
                  ORDER BY n.score DESC, n.publication_date DESC
-                 LIMIT ${limitNum}`;
+                 LIMIT ${queryLimit}`;
             let rows;
             try {
                 [rows] = await this.pool.execute(query(true), excludedIds);
@@ -105,10 +108,11 @@ class NewsRepository {
                 if (!isMissingDiscoveryTable(error)) throw error;
                 [rows] = await this.pool.execute(query(false), excludedIds);
             }
-            console.log(`[NewsRepo] Top News encontradas: ${rows.length}`);
-            
-            // Garantir que cada notícia tem um source_name, mesmo se NULL no DB
-            return rows.filter(isLegacyNews).map(row => ({
+            const technologyNews = rows.filter(row => isLegacyNews(row) && isTechnologyNews(row));
+            console.log(`[NewsRepo] Candidatas tecnológicas: ${technologyNews.length}/${rows.length}`);
+
+            // Oversample before filtering so older off-topic records do not crowd out technology news.
+            return technologyNews.slice(0, limitNum).map(row => ({
                 ...row,
                 source_name: row.source_name || 'Fonte Desconhecida'
             }));

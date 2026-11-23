@@ -1,4 +1,5 @@
 const { isLegacyNews, legacyNewsSql, isMissingDiscoveryTable, getNewsOriginRows } = require('../services/editorial/legacyNewsPolicy');
+const { isTechnologyNews } = require('../services/technologyNewsFilter');
 
 class SelectionRepository {
     constructor(pool) {
@@ -26,6 +27,13 @@ class SelectionRepository {
             if (verifiedRows.some(row => !isLegacyNews(row))) {
                 const error = new Error('Seleção legada bloqueada: notícias Brave exigem aprovação editorial.');
                 error.code = 'UNAPPROVED_EDITORIAL_CONTENT';
+                throw error;
+            }
+            const offTopicRows = verifiedRows.filter(row => !isTechnologyNews(row));
+            if (offTopicRows.length) {
+                const error = new Error('Seleção bloqueada: todas as notícias precisam ter conteúdo claramente relacionado à tecnologia.');
+                error.code = 'OFF_TOPIC_NEWS_BLOCKED';
+                error.blockedNewsIds = offTopicRows.map(row => Number(row.id));
                 throw error;
             }
 
@@ -69,7 +77,7 @@ class SelectionRepository {
     async getTodaySelections() {
         const todayStr = new Date().toISOString().split('T')[0];
         try {
-            const query = includeDiscovery => `SELECT n.id, n.title, n.description, s.name as source_name,
+            const query = includeDiscovery => `SELECT n.id, n.title, n.description, n.tags, s.name as source_name,
                        s.rss_url as source_rss_url, n.original_link, n.main_image, es.position,
                        n.category, n.metadata
                 FROM edition_selections es
@@ -86,7 +94,7 @@ class SelectionRepository {
                 [rows] = await this.pool.execute(query(false), [todayStr]);
             }
             
-            return rows.filter(isLegacyNews);
+            return rows.filter(row => isLegacyNews(row) && isTechnologyNews(row));
         } catch (error) {
             console.error('[SelectionRepo] ❌ Erro ao buscar seleções de hoje:', error);
             return [];
