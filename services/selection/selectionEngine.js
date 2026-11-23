@@ -58,23 +58,26 @@ class SelectionEngine {
         })));
     }
 
-    selectCandidatesForEdition(rankedCandidates) {
-        const selection = this.selectDiversifiedCandidates(rankedCandidates);
-        if (selection.length > config.limits.smallEditionThreshold) return selection;
+    selectCandidatesForEdition(rankedCandidates, { seedItems = [], targetCount = config.limits.maxNewsPerEdition } = {}) {
+        const selection = this.selectDiversifiedCandidates(rankedCandidates, null, { seedItems, targetCount });
+        if (seedItems.length > 0 || selection.length >= targetCount || selection.length > config.limits.smallEditionThreshold) return selection;
 
         // Em edições curtas, limite cada organização a uma única notícia.
         return this.selectDiversifiedCandidates(
             rankedCandidates,
-            config.limits.smallEditionMaxPerOrganization
+            config.limits.smallEditionMaxPerOrganization,
+            { seedItems, targetCount }
         );
     }
 
-    selectDiversifiedCandidates(rankedCandidates, maxPerOrganizationOverride = null) {
+    selectDiversifiedCandidates(rankedCandidates, maxPerOrganizationOverride = null, { seedItems = [], targetCount = config.limits.maxNewsPerEdition } = {}) {
         this.rules.reset(maxPerOrganizationOverride);
         const remaining = [...rankedCandidates];
-        const finalSelection = [];
+        const finalSelection = [...seedItems];
+        const selectedIds = new Set(seedItems.map(item => Number(item.id || item.news_id)).filter(Number.isFinite));
+        seedItems.forEach(item => this.rules.registerSelection(item));
 
-        while (remaining.length > 0 && finalSelection.length < config.limits.maxNewsPerEdition) {
+        while (remaining.length > 0 && finalSelection.length < targetCount) {
             let bestIndex = -1;
             let bestEvaluation = null;
             let bestAdjustedScore = -Infinity;
@@ -105,12 +108,137 @@ class SelectionEngine {
             if (bestIndex < 0) break;
 
             const [bestCandidate] = remaining.splice(bestIndex, 1);
+            const candidateId = Number(bestCandidate.news?.id || bestCandidate.news?.news_id);
+            if (Number.isFinite(candidateId) && selectedIds.has(candidateId)) continue;
             bestCandidate.news.selectionReason = bestEvaluation.reason;
             this.rules.registerSelection(bestCandidate.news);
             finalSelection.push(bestCandidate.news);
+            if (Number.isFinite(candidateId)) selectedIds.add(candidateId);
         }
 
         return finalSelection;
+    }
+
+    /**
+     * Completa uma edição filtrando primeiro o que já estava salvo e buscando
+     * candidatas tecnológicas válidas para repor as posições removidas.
+     */
+    async completeDailySelection(existingItems = [], {
+        excludedNewsIds = [],
+        categoryFilter = null,
+        targetCount = config.limits.maxNewsPerEdition
+    } = {}) {
+        const requestedCount = Math.max(0, Math.min(
+            config.limits.maxNewsPerEdition,
+            Math.floor(Number(targetCount) || 0)
+        ));
+        const excludedIds = new Set((excludedNewsIds || []).map(Number).filter(Number.isFinite));
+        const normalizedCategory = String(categoryFilter || '').trim().toLowerCase();
+        const stats = {
+            excludedByTechnology: 0,
+            excludedByLegacyOrigin: 0,
+            excludedByAdvertisement: 0,
+            excludedByHistory: 0,
+            excludedByCategory: 0,
+            excludedAsDuplicate: 0,
+            candidateCount: 0,
+            replacements: 0,
+            diversityFallbackItems: 0
+        };
+        const validItems = [];
+        const selectedIds = new Set();
+
+        for (const item of existingItems || []) {
+            const id = Number(item?.id || item?.news_id);
+            if (item && !isLegacyNews(item)) {
+                stats.excludedByLegacyOrigin++;
+                continue;
+            }
+            if (!item || !isTechnologyNews(item)) {
+                stats.excludedByTechnology++;
+                continue;
+            }
+            if (classifyAdvertisement(item).isAdvertisement) {
+                stats.excludedByAdvertisement++;
+                continue;
+            }
+            if (Number.isFinite(id) && excludedIds.has(id)) {
+                stats.excludedByHistory++;
+                continue;
+            }
+            if (normalizedCategory && !String(item.category || '').toLowerCase().includes(normalizedCategory)) {
+                stats.excludedByCategory++;
+                continue;
+            }
+            if (Number.isFinite(id) && selectedIds.has(id)) {
+                stats.excludedAsDuplicate++;
+                continue;
+            }
+
+            validItems.push(item);
+            if (Number.isFinite(id)) selectedIds.add(id);
+            if (validItems.length >= requestedCount) break;
+        }
+
+        if (validItems.length >= requestedCount) {
+            return { items: validItems.slice(0, requestedCount), stats };
+        }
+
+        const excludedCandidateIds = new Set([...excludedIds, ...selectedIds]);
+        const candidateLimit = 2000;
+        const candidates = await this.newsRepo.getTopNews(candidateLimit, [...excludedCandidateIds]);
+        const rankedCandidates = [];
+
+        (candidates || []).forEach((news, originalPosition) => {
+            const id = Number(news?.id || news?.news_id);
+            if (!news || !isLegacyNews(news)) {
+                stats.excludedByLegacyOrigin++;
+                return;
+            }
+            if (!isTechnologyNews(news)) {
+                stats.excludedByTechnology++;
+                return;
+            }
+            if (classifyAdvertisement(news).isAdvertisement) {
+                stats.excludedByAdvertisement++;
+                return;
+            }
+            if (Number.isFinite(id) && excludedCandidateIds.has(id)) return;
+            if (normalizedCategory && !String(news.category || '').toLowerCase().includes(normalizedCategory)) {
+                stats.excludedByCategory++;
+                return;
+            }
+
+            rankedCandidates.push({ news: { ...news }, score: Number(news.score || 0), originalPosition });
+        });
+        stats.candidateCount = rankedCandidates.length;
+
+        const items = this.selectCandidatesForEdition(rankedCandidates, {
+            seedItems: validItems,
+            targetCount: requestedCount
+        });
+
+        // Se as regras de diversidade deixarem lacunas apesar de haver artigos
+        // elegíveis, completa as posições relaxando apenas esses limites. Os
+        // filtros de tecnologia, origem, anúncios, categoria e histórico seguem ativos.
+        if (items.length < requestedCount) {
+            const completedIds = new Set(items.map(item => Number(item.id || item.news_id)).filter(Number.isFinite));
+            for (const candidate of rankedCandidates) {
+                if (items.length >= requestedCount) break;
+                const id = Number(candidate.news?.id || candidate.news?.news_id);
+                if (Number.isFinite(id) && completedIds.has(id)) continue;
+                items.push({
+                    ...candidate.news,
+                    selectionReason: 'Complemento tecnológico após aplicação dos filtros de conteúdo.'
+                });
+                if (Number.isFinite(id)) completedIds.add(id);
+                stats.diversityFallbackItems++;
+            }
+        }
+
+        items.splice(requestedCount);
+        stats.replacements = Math.max(0, items.length - validItems.length);
+        return { items, stats };
     }
 
     /**

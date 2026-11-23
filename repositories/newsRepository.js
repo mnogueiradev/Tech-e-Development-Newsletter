@@ -109,7 +109,10 @@ class NewsRepository {
                 [rows] = await this.pool.execute(query(false), excludedIds);
             }
             const technologyNews = rows.filter(row => isLegacyNews(row) && isTechnologyNews(row));
-            console.log(`[NewsRepo] Candidatas tecnológicas: ${technologyNews.length}/${rows.length}`);
+            console.log(
+                `[NewsRepo] Candidatas tecnológicas: ${technologyNews.length}/${rows.length}; ` +
+                `${rows.length - technologyNews.length} excluída(s) pelo filtro de conteúdo/origem.`
+            );
 
             // Oversample before filtering so older off-topic records do not crowd out technology news.
             return technologyNews.slice(0, limitNum).map(row => ({

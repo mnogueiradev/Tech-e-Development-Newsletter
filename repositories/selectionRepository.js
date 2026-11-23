@@ -74,7 +74,7 @@ class SelectionRepository {
     /**
      * Busca as notícias selecionadas para a edição de hoje
      */
-    async getTodaySelections() {
+    async getTodaySelections({ includeOffTopic = false } = {}) {
         const todayStr = new Date().toISOString().split('T')[0];
         try {
             const query = includeDiscovery => `SELECT n.id, n.title, n.description, n.tags, s.name as source_name,
@@ -94,7 +94,10 @@ class SelectionRepository {
                 [rows] = await this.pool.execute(query(false), [todayStr]);
             }
             
-            return rows.filter(row => isLegacyNews(row) && isTechnologyNews(row));
+            const legacyRows = rows.filter(isLegacyNews);
+            return includeOffTopic
+                ? legacyRows
+                : legacyRows.filter(isTechnologyNews);
         } catch (error) {
             console.error('[SelectionRepo] ❌ Erro ao buscar seleções de hoje:', error);
             return [];

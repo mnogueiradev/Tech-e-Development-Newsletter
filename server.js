@@ -489,9 +489,8 @@ app.patch('/api/admin/news/:id/notes', verifyAdmin, async (req, res) => {
 
 app.get('/api/public/today-edition', async (req, res) => {
     try {
-        const SelectionRepository = require('./repositories/selectionRepository');
-        const selectionRepo = new SelectionRepository(pool);
-        const items = await selectionRepo.getTodaySelections();
+        // A mesma curadoria recompõe posições filtradas antes de expor a edição pública.
+        const items = await getNewsletterItems('tecnologia');
         const todayStr = new Date().toISOString().split('T')[0];
         
         let editionTitle = 'A Edição de Hoje';
@@ -1159,53 +1158,41 @@ async function getNewsletterItems(topic) {
     const selectionRepo = new SelectionRepository(pool);
     const newsletterHistoryRepo = new NewsletterHistoryRepository(pool);
     const previousEditionNewsIds = await newsletterHistoryRepo.getPreviousEditionNewsIds();
-    
-    const { classifyAdvertisement } = require('./services/adDetector');
-    const filterAdvertisements = (items, context) => (items || []).filter(item => {
-        const decision = classifyAdvertisement(item);
-        if (decision.isAdvertisement) {
-            console.log(`[NEWSLETTER] Conteúdo promocional removido (${context}): ${item.title} — ${decision.reasons.join(', ')}`);
-            return false;
-        }
-        return true;
+
+    const isGeneralEdition = !topic || topic === 'tecnologia';
+    const savedItems = await selectionRepo.getTodaySelections({ includeOffTopic: true });
+    const engine = new SelectionEngine(pool);
+    const { items, stats } = await engine.completeDailySelection(savedItems, {
+        excludedNewsIds: [...previousEditionNewsIds],
+        categoryFilter: isGeneralEdition ? null : topic,
+        targetCount: require('./config/selectionConfig').limits.maxNewsPerEdition
     });
 
-    let rawItems = await selectionRepo.getTodaySelections();
-    const savedSelectionCount = (rawItems || []).length;
-    rawItems = filterAdvertisements(rawItems, 'seleção existente');
-    const previousDayFiltered = rawItems.filter(item => !previousEditionNewsIds.has(Number(item.id || item.news_id)));
-    if (previousDayFiltered.length < rawItems.length) {
-        console.log(`[NEWSLETTER] ${rawItems.length - previousDayFiltered.length} notícia(s) da edição anterior removida(s) da seleção salva.`);
-    }
-    rawItems = previousDayFiltered;
+    const removedCount = stats.excludedByTechnology + stats.excludedByLegacyOrigin +
+        stats.excludedByAdvertisement + stats.excludedByHistory + stats.excludedByCategory +
+        stats.excludedAsDuplicate;
+    console.log(
+        `[NEWSLETTER] Filtro removeu ${removedCount} notícia(s) ` +
+        `(tecnologia: ${stats.excludedByTechnology}, origem: ${stats.excludedByLegacyOrigin}, ` +
+        `anúncio: ${stats.excludedByAdvertisement}, repetida: ${stats.excludedByHistory}, ` +
+        `fora do tópico: ${stats.excludedByCategory}, duplicata: ${stats.excludedAsDuplicate}); ` +
+        `${stats.replacements} substituição(ões) válida(s), ` +
+        `${stats.diversityFallbackItems} após relaxar limites de diversidade; edição final: ${items.length}/9.`
+    );
 
-    // Gera ou atualiza a seleção se ainda não existir ou se a seleção salva continha anúncios.
-    if (rawItems.length === 0 || rawItems.length < savedSelectionCount) {
-        console.log('[NEWSLETTER] Gerando uma seleção sem conteúdo promocional...');
-        const engine = new SelectionEngine(pool);
-        rawItems = filterAdvertisements(await engine.runDailySelection(false), 'nova seleção');
-    }
-    
-    let filteredItems = rawItems;
-    if (topic && topic !== 'tecnologia') {
-        filteredItems = rawItems.filter(item => item.category && item.category.toLowerCase().includes(topic.toLowerCase()));
-        
-        if (filteredItems.length === 0) {
-            console.log(`[NEWSLETTER] Nenhuma notícia encontrada para o tópico ${topic}. Buscando do repositório...`);
-            const NewsRepository = require('./repositories/newsRepository');
-            const newsRepo = new NewsRepository(pool);
-            const fallback = filterAdvertisements(
-                await newsRepo.getTopNews(100, [...previousEditionNewsIds]),
-                'fallback'
-            );
-            filteredItems = fallback.filter(item =>
-                !previousEditionNewsIds.has(Number(item.id || item.news_id)) &&
-                item.category && item.category.toLowerCase().includes(topic.toLowerCase())
-            );
+    // A edição geral alimenta também a página pública. Persistimos a curadoria
+    // recomposta para que os itens barrados não reapareçam na próxima leitura.
+    if (isGeneralEdition) {
+        const savedIds = savedItems.map(item => Number(item.id || item.news_id));
+        const completedIds = items.map(item => Number(item.id || item.news_id));
+        const changed = savedIds.length !== completedIds.length ||
+            savedIds.some((id, index) => id !== completedIds[index]);
+        if (changed && items.length > 0) {
+            await selectionRepo.saveSelections(items, require('./config/selectionConfig').version);
         }
     }
-    
-    return formatNewsletterItems(filteredItems);
+
+    return formatNewsletterItems(items);
 }
 
 async function processAndSendNewsletter(tz = null) {
@@ -1248,8 +1235,9 @@ async function processAndSendNewsletter(tz = null) {
                 const sharedNews = await getNewsletterItems(topic);
                 console.log(`📰 Notícias base preparadas para '${topic}': ${sharedNews.length} itens`);
 
-                if (!sharedNews || sharedNews.length === 0) {
-                    const aviso = `[NEWSLETTER] ⚠️ 0 notícias para o tópico ${topic} — envio abortado para este tópico`;
+                const requiredNewsCount = require('./config/selectionConfig').limits.maxNewsPerEdition;
+                if (!sharedNews || sharedNews.length < requiredNewsCount) {
+                    const aviso = `[NEWSLETTER] ⚠️ Apenas ${sharedNews?.length || 0}/${requiredNewsCount} notícias tecnológicas válidas para ${topic}; envio abortado para não enviar uma edição incompleta.`;
                     console.log(aviso);
                     resumo.errors.push(aviso);
                     continue;
@@ -1302,25 +1290,33 @@ async function processAndSendNewsletter(tz = null) {
                             candidatePool
                         );
 
-                        if (personalizedSelection.length > 0) {
-                            recipientNews = formatNewsletterItems(personalizedSelection);
-                            console.log(`[PERSONALIZAÇÃO] Edição ajustada para inscrito #${sub.id}: ${personalizedSelection.length} notícias.`);
+                        const downvotedIds = new Set((profile.downvotedNewsIds || []).map(Number));
+                        const personalizedItems = formatNewsletterItems(personalizedSelection);
+                        const personalizedIds = new Set(personalizedItems.map(item => Number(item.id)));
+                        const alternatives = sharedNews.filter(item =>
+                            !personalizedIds.has(Number(item.id)) && !downvotedIds.has(Number(item.id))
+                        );
+                        const completedPersonalization = [...personalizedItems, ...alternatives].slice(0, requiredNewsCount);
+
+                        if (completedPersonalization.length === requiredNewsCount) {
+                            recipientNews = completedPersonalization;
+                            console.log(`[PERSONALIZAÇÃO] Edição ajustada para inscrito #${sub.id}: ${personalizedItems.length} notícia(s) personalizadas e ${alternatives.length} candidatas de complemento disponíveis.`);
                         } else {
-                            const downvotedIds = new Set(profile.downvotedNewsIds.map(Number));
-                            const alternatives = sharedNews.filter(item => !downvotedIds.has(Number(item.id)));
-                            if (alternatives.length > 0) recipientNews = alternatives;
-                            console.warn(`[PERSONALIZAÇÃO] Sem candidatas suficientes para o inscrito #${sub.id}; usando a seleção compartilhada disponível.`);
+                            // Mantém as nove posições e a validação editorial quando o
+                            // perfil individual não oferece alternativas suficientes.
+                            recipientNews = sharedNews;
+                            console.warn(`[PERSONALIZAÇÃO] Sem alternativas suficientes para completar nove notícias do inscrito #${sub.id}; usando a edição tecnológica compartilhada.`);
                         }
                     }
 
                     recipientNews = recipientNews.filter(item =>
                         !previousEditionNewsIds.has(Number(item.id))
                     );
-                    if (recipientNews.length === 0) {
-                        console.warn(`[NEWSLETTER] Nenhuma notícia nova para o inscrito #${sub.id}; envio individual cancelado.`);
+                    if (recipientNews.length < requiredNewsCount) {
+                        console.warn(`[NEWSLETTER] Apenas ${recipientNews.length}/${requiredNewsCount} notícias válidas para o inscrito #${sub.id}; envio individual cancelado.`);
                         results.push({
                             status: 'fulfilled',
-                            value: { success: false, error: 'Nenhuma notícia nova disponível.' }
+                            value: { success: false, error: 'Não há nove notícias tecnológicas válidas disponíveis.' }
                         });
                         continue;
                     }
