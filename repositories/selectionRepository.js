@@ -1,5 +1,6 @@
 const { isLegacyNews, legacyNewsSql, isMissingDiscoveryTable, getNewsOriginRows } = require('../services/editorial/legacyNewsPolicy');
 const { isTechnologyNews } = require('../services/technologyNewsFilter');
+const { classifyAdvertisement } = require('../services/adDetector');
 
 class SelectionRepository {
     constructor(pool) {
@@ -27,6 +28,13 @@ class SelectionRepository {
             if (verifiedRows.some(row => !isLegacyNews(row))) {
                 const error = new Error('Seleção legada bloqueada: notícias Brave exigem aprovação editorial.');
                 error.code = 'UNAPPROVED_EDITORIAL_CONTENT';
+                throw error;
+            }
+            const advertisementRows = verifiedRows.filter(row => classifyAdvertisement(row).isAdvertisement);
+            if (advertisementRows.length) {
+                const error = new Error('Seleção bloqueada: conteúdo promocional não pode entrar na edição.');
+                error.code = 'ADVERTISEMENT_CONTENT_BLOCKED';
+                error.blockedNewsIds = advertisementRows.map(row => Number(row.id));
                 throw error;
             }
             const offTopicRows = verifiedRows.filter(row => !isTechnologyNews(row));

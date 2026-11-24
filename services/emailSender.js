@@ -1,6 +1,7 @@
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const { isBraveDiscovered, getNewsOriginRows } = require('./editorial/legacyNewsPolicy');
 const { isTechnologyNews } = require('./technologyNewsFilter');
+const { classifyAdvertisement } = require('./adDetector');
 
 // Respeita o rate limit do Resend (10 req/s): até 3 tentativas em caso de 429
 const MAX_ATTEMPTS = 3;
@@ -123,6 +124,13 @@ async function sendLegacyNewsletterEmail({ pool, newsItems, to, subject, html, t
             const error = new Error('Envio legado bloqueado: notícias descobertas pela Brave exigem o fluxo editorial aprovado.');
             error.code = 'UNAPPROVED_EDITORIAL_CONTENT';
             error.blockedNewsIds = braveItems.map(item => Number(item.id));
+            throw error;
+        }
+        const advertisementItems = rows.filter(item => classifyAdvertisement(item).isAdvertisement);
+        if (advertisementItems.length) {
+            const error = new Error('Envio legado bloqueado: conteúdo promocional identificado na edição.');
+            error.code = 'ADVERTISEMENT_CONTENT_BLOCKED';
+            error.blockedNewsIds = advertisementItems.map(item => Number(item.id));
             throw error;
         }
         const offTopicItems = rows.filter(item => !isTechnologyNews(item));

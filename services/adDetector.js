@@ -3,22 +3,29 @@ const DISCLOSURE_PATTERNS = [
     /\b(?:sponsored|paid|partner)\s+(?:content|post|article|story)\b/,
     /\b(?:sponsored|presented|brought\s+to\s+you)\s+by\b/,
     /\b(?:this|the)\s+(?:content|post|article|story)\s+(?:is|was)\s+(?:sponsored|paid)\b/,
-    /\bpaid\s+partnership\b|\bin\s+partnership\s+with\b/,
+    /\bpaid\s+partnership\b|\bin\s+partnership\s+with\b|\bpaid\s+promotion\b|\bcommercial\s+partnership\b/,
     /\badvertorial\b|\badvertisement\b|\bbrand\s+content\b/,
     /\bconteudo\s+(?:patrocinado|pago|de\s+marca|em\s+parceria\s+com)\b/,
     /\b(?:post|artigo|material)\s+(?:patrocinado|publicitario)\b/,
     /\bpublieditorial\b|\bpublipost\b/,
     /\bparceria\s+(?:paga|patrocinada)\b/,
-    /\bpatrocinad[oa]\s+por\b|\bproduzido\s+em\s+parceria\s+com\b|\bconteudo\s+oferecido\s+por\b/,
+    /\bpatrocinad[oa]\s+por\b|\bproduzido\s+em\s+parceria\s+com\b|\bconteudo\s+oferecido\s+por\b|\bpromocao\s+paga\b/,
+    /\b(?:review|evaluation)\s+(?:unit|sample|device)\s+(?:provided|supplied|loaned|gifted)\s+by\b/,
+    /\b(?:review|test)\s+(?:unit|sample|produto)\s+(?:fornecido|cedido|enviado|presenteado)\s+por\b/,
+    /\b(?:gifted|provided|supplied)\s+by\s+[\w.-]+\s+for\s+(?:this|our|the)\s+(?:review|article|story)\b/,
     /^\s*(?:press|news)\s+release\b/,
     /^\s*comunicado\s+de\s+imprensa\b/,
     /#(?:publi|ad)\b/
 ];
 
 const PROMOTION_TERMS = [
-    /\b(?:promocao|desconto|discount|cupom|coupon|codigo\s+promocional|promo\s+code|oferta\s+imperdivel|ofertas?\s+(?:do\s+dia|de\s+hoje)|deals?\s+roundup|daily\s+deals|on\s+sale)\b/,
-    /\b(?:black\s+friday|prime\s+day|frete\s+gratis|limited[- ]time\s+offer|flash\s+sale|sale\s+(?:today|now))\b/
+    /\b(?:promocao|desconto|discount|cupom|coupon|codigo\s+promocional|promo\s+code|oferta\s+imperdivel|ofertas?\s+(?:do\s+dia|de\s+hoje)|deals?\s+roundup|daily\s+deals|on\s+sale|price\s+drop|lowest\s+price|all[- ]time\s+low)\b/,
+    /\b(?:black\s+friday|prime\s+day|frete\s+gratis|limited[- ]time\s+offer|flash\s+sale|sale\s+(?:today|now)|save\s+(?:up\s+to\s+)?(?:[$€£]?\d+%?|\d+\s+percent))\b/
 ];
+
+const CURRENCY_AMOUNT = /(?:\b(?:us\$|usd|r\$|brl)\s?\d[\d,.]*|[$€£]\s?\d[\d,.]*|\b\d[\d,.]*\s?(?:usd|brl|reais|euros|pounds)\b)/i;
+const PRICE_PROMOTION_LANGUAGE = /\b(?:only|just|for\s+only|for\s+just|as\s+low\s+as|por\s+apenas|por\s+so|somente|custa\s+apenas|custa\s+so|a\s+preco\s+de\s+oferta|now\s+down\s+to|drops?\s+to|lowest\s+price|cheapest|best\s+value|bargain|steal)\b/i;
+const REVERSE_PRICE_PROMOTION_LANGUAGE = /\b(?:only|just|a\s+steal|a\s+bargain|best\s+value|lowest\s+price)\b/i;
 
 const DIRECT_CALLS_TO_BUY = [
     /\b(?:compre|comprar|garanta|adquira|assine|aproveite)\s+(?:agora|ja|o\s+seu|a\s+sua)\b/,
@@ -68,7 +75,7 @@ function normalize(value) {
 
 function classifyAdvertisement(item = {}) {
     const title = normalize(item.title);
-    const sourceName = normalize(item.source_name || item.source || '');
+    const sourceName = normalize(item.source_name || item.sourceName || item.source || '');
     const summary = normalize([
         item.description,
         item.summary,
@@ -76,8 +83,39 @@ function classifyAdvertisement(item = {}) {
         item.content_snippet
     ].filter(Boolean).join(' '));
     const body = normalize(item.full_content || item['content:encoded'] || item.content || '');
-    const labels = normalize([item.categories, item.tags, item.category].filter(Boolean).map(toPlainText).join(' '));
-    const link = normalize(item.original_link || item.link || '');
+    let metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+    if (typeof item.metadata === 'string') {
+        try {
+            const parsedMetadata = JSON.parse(item.metadata);
+            if (parsedMetadata && typeof parsedMetadata === 'object') metadata = parsedMetadata;
+        } catch (error) {
+            // Metadata livre continua sendo avaliada pelas demais regras de texto.
+        }
+    }
+    const labels = normalize([
+        item.categories,
+        item.tags,
+        item.category,
+        item.ad_label,
+        item.sponsorship,
+        item.metadata,
+        metadata.ad_label,
+        metadata.sponsorship,
+        metadata.content_type,
+        metadata.tags
+    ].filter(Boolean).map(toPlainText).join(' '));
+    const link = normalize(item.original_link || item.originalUrl || item.canonicalUrl || item.link || '');
+
+    const advertisingFlags = [
+        item.isSponsored, item.is_sponsored, item.sponsored, item.isAdvertisement,
+        item.advertisement, item.is_ad, item.isPaid, item.is_paid,
+        item.paidContent, item.paid_content, metadata.isSponsored, metadata.is_sponsored,
+        metadata.sponsored, metadata.isAdvertisement, metadata.advertisement, metadata.is_ad,
+        metadata.isPaid, metadata.is_paid, metadata.paidContent, metadata.paid_content
+    ];
+    if (advertisingFlags.some(value => value === true || value === 1 || /^(?:true|yes|paid|sponsored|advertorial)$/i.test(String(value || '').trim()))) {
+        return { isAdvertisement: true, reasons: ['advertising flag in feed metadata'] };
+    }
 
     // Disclosure labels usually appear in the headline, feed labels, or the article's opening.
     const disclosureText = [title, summary, labels, body.slice(0, 1600)].join(' ');
@@ -87,7 +125,7 @@ function classifyAdvertisement(item = {}) {
     }
 
     const articleText = [title, summary, body].join(' ');
-    if (/\b(?:affiliate\s+links?|this\s+article\s+contains\s+affiliate\s+links|may\s+earn\s+(?:a\s+)?commission|commission\s+(?:may\s+be\s+earned|when\s+you\s+(?:buy|purchase))|links?\s+de\s+afiliados?|podemos\s+receber\s+(?:uma\s+)?comissao|ganhamos\s+comissao|amazon\s+associate.{0,80}qualifying\s+purchases)\b/.test(articleText)) {
+    if (/\b(?:affiliate\s+links?|(?:this\s+)?(?:article|post|story|page)\s+contains?\s+(?:some\s+)?affiliate\s+links?|may\s+earn\s+(?:a\s+)?commission|commission\s+(?:may\s+be\s+earned|when\s+you\s+(?:click|buy|purchase))|we\s+(?:may|might)\s+earn\s+(?:a\s+)?commission|links?\s+de\s+afiliados?|podemos\s+receber\s+(?:uma\s+)?comissao|ganhamos\s+comissao|podemos\s+ganhar\s+comissao|amazon\s+associate.{0,80}qualifying\s+purchases)\b/.test(articleText)) {
         return { isAdvertisement: true, reasons: ['affiliate or commission disclosure'] };
     }
 
@@ -110,6 +148,16 @@ function classifyAdvertisement(item = {}) {
 
     if (PRODUCT_BUYING_GUIDE_PATTERNS.some(pattern => pattern.test(title))) {
         return { isAdvertisement: true, reasons: ['headline is a product buying guide or shopping recommendation'] };
+    }
+
+    // Reviews and shopping-style headlines often omit ad labels but foreground
+    // an unusually low price (for example, "my ... monitor is only US$280").
+    const headlineAndSummary = [title, summary].join(' ');
+    if (CURRENCY_AMOUNT.test(headlineAndSummary) && PRICE_PROMOTION_LANGUAGE.test(headlineAndSummary)) {
+        return { isAdvertisement: true, reasons: ['product headline emphasizes a low price or shopping value'] };
+    }
+    if (CURRENCY_AMOUNT.test(title) && REVERSE_PRICE_PROMOTION_LANGUAGE.test(title)) {
+        return { isAdvertisement: true, reasons: ['product headline presents a price as a bargain or exceptional value'] };
     }
 
     const salesCopy = [title, summary].join(' ');

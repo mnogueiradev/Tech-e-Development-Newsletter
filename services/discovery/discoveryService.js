@@ -5,6 +5,7 @@ const { BraveNewsService } = require('./braveNewsService');
 const { normalizeNewsResult, isWithinPublicationWindow } = require('./newsNormalizer');
 const { detectDuplicate } = require('./newsDeduplicator');
 const { classifyTechnologyNews } = require('../technologyNewsFilter');
+const { classifyAdvertisement } = require('../adDetector');
 
 async function discoverNews({ pool = null, brave = new BraveNewsService(), queries = defaultQueries,
   publishedAfter = null, publishedBefore = null, count = 20, maxPages = 1, persist = Boolean(pool), now = () => new Date(),
@@ -46,6 +47,13 @@ async function discoverNews({ pool = null, brave = new BraveNewsService(), queri
         const item = normalizeNewsResult(result, query, discoveredAt);
         if (!item || !isWithinPublicationWindow(item, publishedAfter, publishedBefore)) {
           rejectedCount++;
+          continue;
+        }
+
+        const advertisementDecision = classifyAdvertisement(item);
+        if (advertisementDecision.isAdvertisement) {
+          rejectedCount++;
+          console.log(`[AD_FILTER] Resultado Brave ignorado: ${item.title} (${advertisementDecision.reasons.join(', ')})`);
           continue;
         }
 
